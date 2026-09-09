@@ -1,0 +1,104 @@
+state ForeignState {
+    int amount;
+}
+
+state LocalState {
+    cov_id foreign_id;
+    int steps;
+}
+
+state TargetState {
+    int units;
+}
+
+fn add_one(int value) -> int {
+    return value + 1;
+}
+
+actor Foreign owns ForeignState {
+    fn amount_is_valid() -> bool {
+        return amount >= 0;
+    }
+
+    fn route_units() -> int {
+        return 0;
+    }
+
+    entry hold() emits next: Foreign {
+        require(amount_is_valid());
+        unrestricted(next.value);
+        become next <- self;
+    }
+
+    entry route() emits next: Target {
+        TargetState next_state = {
+            units: route_units(),
+        };
+        unrestricted(next.value);
+        become next <- Target(next_state);
+    }
+}
+
+actor Local owns LocalState {
+    fn foreign_identity(ForeignState value) -> ForeignState {
+        return value;
+    }
+
+    fn snapshot() -> LocalState {
+        return LocalState {
+            foreign_id: foreign_id,
+            steps: steps,
+        };
+    }
+
+    fn read_steps(LocalState value) -> int {
+        return value.steps;
+    }
+
+    fn incremented_steps() -> int {
+        return add_one(read_steps(snapshot()));
+    }
+
+    fn next_state(int extra_steps) -> LocalState {
+        return LocalState {
+            foreign_id: foreign_id,
+            steps: incremented_steps() + extra_steps,
+        };
+    }
+
+    entry step()
+    observes remote by self.foreign_id {
+        inputs {
+            src: Foreign,
+        }
+
+        outputs {
+            remote_next: Foreign,
+        }
+    }
+    emits next: Local {
+        ForeignState next_foreign = foreign_identity(state(remote.inputs.src));
+        require remote.outputs become {
+            remote_next <- Foreign(next_foreign),
+        };
+
+        unrestricted(next.value);
+        become next <- Local(next_state(0));
+    }
+}
+
+actor Target owns TargetState {
+    fn units_are_valid() -> bool {
+        return units >= 0;
+    }
+
+    entry hold() emits none {
+        require(units_are_valid());
+    }
+}
+
+app Test {
+    actor Foreign;
+    actor Local;
+    actor Target;
+}

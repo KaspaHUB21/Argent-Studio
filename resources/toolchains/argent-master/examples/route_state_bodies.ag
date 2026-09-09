@@ -1,0 +1,92 @@
+state LobbyState {
+    int nonce;
+}
+
+state BoardState {
+    int ply;
+}
+
+state ArchiveState {
+    int final_ply;
+}
+
+actor enum MoveActor {
+    Pawn;
+    Knight;
+}
+
+// Lobby carries the packed Board family and opens it when entering Mux.
+actor Lobby owns LobbyState {
+    entry open_board() emits next: Mux {
+        BoardState next_board = {
+            ply: nonce,
+        };
+
+        unrestricted(next.value);
+        become next <- Mux(next_board);
+    }
+}
+
+actor Mux owns BoardState {
+    entry choose(MoveActor target) emits next: MoveActor {
+        BoardState next_board = {
+            ply: ply + 1,
+        };
+
+        unrestricted(next.value);
+        become next <- target(next_board);
+    }
+
+    // Archive needs one packed Board-family commitment, so this transition
+    // packs the open table carried by Mux.
+    entry archive() emits next: Archive {
+        ArchiveState next_archive = {
+            final_ply: ply,
+        };
+
+        unrestricted(next.value);
+        become next <- Archive(next_archive);
+    }
+}
+
+actor Pawn owns BoardState {
+    entry inspect() emits none {
+        require(ply >= 0);
+    }
+}
+
+actor Knight owns BoardState {
+    entry inspect() emits none {
+        require(ply >= 1);
+    }
+}
+
+// Keeping another BoardState actor outside the family makes BoardState's
+// generated route layout actor-specific. Lobby must therefore materialize an
+// ordinary BoardState local directly into Mux's concrete generated layout.
+actor Spectator owns BoardState {
+    entry inspect() emits none {
+        require(ply >= 0);
+    }
+}
+
+// This downstream route gives Archive a packed Board-family dependency.
+actor Archive owns ArchiveState {
+    entry reopen_as_pawn() emits next: Pawn {
+        BoardState next_board = {
+            ply: final_ply + 1,
+        };
+
+        unrestricted(next.value);
+        become next <- Pawn(next_board);
+    }
+}
+
+app RouteStateBodies {
+    actor Lobby;
+    actor Mux;
+    actor Pawn;
+    actor Knight;
+    actor Spectator;
+    actor Archive;
+}

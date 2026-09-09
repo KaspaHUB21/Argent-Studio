@@ -1,0 +1,27 @@
+state BadgeState {
+    pubkey owner;
+    cov_id controller_id;
+    int balance;
+}
+
+actor Badge owns BadgeState {
+    entry apply(int next_balance, sig owner_sig) emits {
+        badge: Badge,
+    } {
+        require(controller_id.co_spent());
+        require(checkSig(owner_sig, owner));
+
+        BadgeState next = {
+            owner: owner,
+            controller_id: controller_id,
+            balance: next_balance,
+        };
+
+        unrestricted(badge.value);
+        become badge <- Badge(next);
+    }
+}
+
+app BadgeAsset {
+    actor Badge;
+}

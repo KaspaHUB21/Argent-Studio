@@ -1,0 +1,74 @@
+state ControllerState {
+    actor_type<PairState> pair_type;
+    int launches;
+}
+
+state PairState {
+    int amount;
+}
+
+state AnchorState {
+    int amount;
+}
+
+actor Controller owns ControllerState {
+    entry advance(cov_id pair_id, int spawned_amount)
+    observes existing by pair_id {
+        inputs {
+            anchor: Anchor,
+        }
+        outputs {
+            pair: self.pair_type,
+        }
+    }
+    spawns newborn by newborn_id {
+        outputs {
+            pair: self.pair_type,
+        }
+    }
+    emits next: Controller {
+        PairState observed_next = {
+            amount: existing.inputs.anchor.amount + 1,
+        };
+        PairState spawned = {
+            amount: spawned_amount,
+        };
+        ControllerState next_state = {
+            pair_type: pair_type,
+            launches: launches + 1,
+        };
+
+        require existing.outputs become {
+            pair <- self.pair_type(observed_next),
+        };
+        unrestricted(newborn.outputs.pair.value);
+        require newborn.outputs become {
+            pair <- self.pair_type(spawned),
+        };
+        unrestricted(next.value);
+        become next <- Controller(next_state);
+    }
+}
+
+actor Anchor owns AnchorState {
+    entry advance() emits next: Pair {
+        PairState next_state = {
+            amount: amount + 1,
+        };
+        unrestricted(next.value);
+        become next <- Pair(next_state);
+    }
+}
+
+actor Pair owns PairState {
+    entry keep() emits next: Pair {
+        unrestricted(next.value);
+        become next <- self;
+    }
+}
+
+app SharedActorWitness {
+    actor Controller;
+    actor Anchor;
+    actor Pair;
+}

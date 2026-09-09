@@ -1,0 +1,69 @@
+// Open ICC agent app.
+//
+// Agents own their capability header and authorize controller-led transitions
+// by requiring the controller covenant to be co-spent.
+
+import "./core.ag";
+
+state ForagerStrategy {
+    int hunger;
+    int mood;
+    byte[32] target_agent_id;
+}
+
+state ForagerState expands AgentCapsule {
+    strategy: ForagerStrategy;
+}
+
+actor Agent owns AgentCapsule {
+    entry step(AgentCapsule next_agent) emits {
+        agent: Agent,
+    } {
+        require(controller_id.co_spent());
+        require(next_agent.world_id == world_id);
+        require(next_agent.agent_id == agent_id);
+        require(next_agent.species_id == species_id);
+        require(next_agent.controller_id == controller_id);
+        require(next_agent.capabilities_digest == capabilities_digest);
+        require(next_agent.strategy == strategy);
+        require(next_agent.generation == generation);
+
+        unrestricted(agent.value);
+        become agent <- Agent(next_agent);
+    }
+}
+
+actor Forager owns ForagerState {
+    entry step(int next_x, int next_y, int next_energy) emits {
+        agent: Forager,
+    } {
+        require(controller_id.co_spent());
+        require(next_energy == energy - 1);
+        require(next_energy >= 0);
+
+        ForagerState next_agent = {
+            world_id: world_id,
+            agent_id: agent_id,
+            species_id: species_id,
+            controller_id: controller_id,
+            capabilities_digest: capabilities_digest,
+            strategy: ForagerStrategy {
+                hunger: strategy.hunger + 1,
+                mood: strategy.mood,
+                target_agent_id: strategy.target_agent_id,
+            },
+            x: next_x,
+            y: next_y,
+            energy: next_energy,
+            generation: generation,
+        };
+
+        unrestricted(agent.value);
+        become agent <- Forager(next_agent);
+    }
+}
+
+app OpenAgent {
+    actor Agent;
+    actor Forager;
+}

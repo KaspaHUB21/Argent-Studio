@@ -1,0 +1,70 @@
+# Argent Studio
+
+A Tauri desktop editor for Argent contracts, with a source editor, interactive structure view, compiler output, and local test transactions.
+
+## Features
+
+- Projects, editable examples, named project duplication, and conflict-aware saving.
+- Code highlighting, completion, folding, and linked source and structure views.
+- Local compilation, generated artifacts, and transaction simulation with lossless integer values.
+- Light and dark themes, English and German interface localization.
+- Optional AI assistance, disabled by default. API credentials use the operating system credential store.
+
+## Build from source
+
+Install Node.js 22 or newer, pnpm, Rust 1.94 or newer, and the native Tauri build prerequisites for your operating system. Windows requires C++ build tools and WebView2. macOS requires Xcode command-line tools.
+
+```sh
+pnpm install --frozen-lockfile
+node scripts/build-runtime.mjs
+pnpm tauri dev
+```
+
+The runtime build compiles the vendored Argent compiler and local transaction runner, then copies the active Node executable into the runtime folder. Native helper binaries must be built on the target platform. Cargo and pnpm lockfiles pin dependencies; the first build requires network access to retrieve them.
+
+For a production application bundle:
+
+```sh
+pnpm tauri build
+```
+
+For an unpackaged desktop binary:
+
+```sh
+node scripts/build-desktop.mjs
+```
+
+Keep the `resources` directory alongside an unpackaged executable. Generated binaries, build outputs, caches, private projects, and user settings are excluded from this repository.
+
+Windows has been exercised during development. macOS support is prepared in the source but has not been verified on a Mac. Signing and notarization are separate distribution steps.
+
+## Projects and examples
+
+Development projects use the local `projects` directory. Portable Windows builds use a `projects` directory beside the launcher or executable. macOS bundles use `Documents/Argent Studio/projects`. Set `ARGENT_PROJECTS_DIR` to an absolute directory to override this location.
+
+The four examples are seeded from `resources/examples/catalog` without overwriting existing projects. Reopening an example reuses its existing folder. Use **Duplicate project** to create a separately named copy. Generated files belong in each project's `build` directory and are available from **Generated files**. Keep recent builds and use the build cleanup action when needed.
+
+## Tests
+
+```sh
+pnpm test
+cargo test --locked --manifest-path src-tauri/Cargo.toml
+pnpm exec playwright test --workers=1
+```
+
+Browser tests currently use Microsoft Edge. Compiler and transaction integration tests require the native helpers from `build-runtime.mjs`. Tests do not require paid API calls. Test output and screenshots are ignored by Git.
+
+## Repository contents
+
+- `frontend`: desktop web interface.
+- `src-tauri`: native Rust application and configuration.
+- `resources/assets/language`: local language and structure services.
+- `resources/toolchains/argent-master`: vendored compiler and transaction runtime sources.
+- `resources/examples/catalog`: public example templates, without build history.
+- `scripts` and `tests`: build helpers and automated checks.
+
+Documentation and file names are English. German strings in source files are interface translations and translation tests, retained for the bilingual application.
+
+## License
+
+Original application code is MIT licensed. Vendored components retain their own licenses. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

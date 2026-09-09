@@ -1,0 +1,57 @@
+# Argent for VS Code
+
+Lightweight VS Code language support for `.ag` files. It has no runtime
+dependencies and does not require a separate language server.
+
+Features:
+
+- `.ag` files get the `argent` language id.
+- Argent routing words such as `become`, `emits`, `consumes`, `observes`, and `spawns`
+  use keyword scopes.
+- Current language words such as `delegate`, `actor enum`, `virtual`,
+  `expands`, `const`, `inputs`, `outputs`, and `as` are highlighted.
+- Current primitive/source types such as `int`, `temporal`, `byte`, `bool`, `sig`,
+  `pubkey`, `cov_id`, `datasig`, and `actor_type<State>` are highlighted.
+- The rest of the file falls through to Rust TextMate highlighting.
+- Completion includes Argent keywords, primitive types, builtins, top-level
+  `state`, `actor`, `actor enum`, `fn`, `const`, and `app` declarations, plus
+  actor `fn`, `entry`, and `delegate` callables.
+- Relative imports are followed recursively, so declarations from imported
+  `.ag` files participate in completion, semantic highlighting, hover, and
+  go-to-definition.
+- Import paths are clickable and support go-to-definition.
+- `///` and `/** ... */` comments immediately above declarations appear as
+  Markdown documentation in completion previews and hovers.
+- Parameters of `fn`, `entry`, and `delegate` callables participate in
+  completion, semantic highlighting, hover, and go-to-definition within their
+  implementation bodies.
+- `self.` completes fields from the enclosing actor's owned state (including
+  inherited expanded-state fields); hover and go-to-definition resolve back to
+  the field declaration.
+- Actor function, entry, and delegate bodies also offer owned-state fields in
+  ordinary completion.
+- Completion inside entry and delegate bodies includes variables introduced by
+  `consumes`, `emits`, `observes`, and `spawns` clauses.
+- Completion and hover document the uniform input-reference reads, explicit
+  `state(self)`, `state(consumed)`, and `state(observed.inputs.handle)`
+  authored-state reconstruction forms, and `digest(authored_state)` storage
+  payload commitments such as `digest(state(consumed))`.
+- The editor indexer is tolerant of unfinished function and actor bodies.
+- `std::core` is indexed as an imported Argent module. Import paths and
+  imported functions navigate to the compiler's standard-library source.
+
+Install locally by symlinking the unpacked extension from the repo root, then reload VS Code:
+
+```bash
+mkdir -p ~/.vscode/extensions
+ln -s "$PWD/vscode/argent-syntax" ~/.vscode/extensions/kaspanet.argent-syntax-0.1.0
+```
+
+If the workspace has a manual `files.associations` entry for `*.ag`, set it to `argent` or remove it.
+
+Run the dependency-free scanner tests with:
+
+```bash
+cd vscode/argent-syntax
+npm test
+```

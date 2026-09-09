@@ -1,0 +1,724 @@
+//! Parses loaded source modules into Argent syntax declarations.
+//!
+//! Entry bodies are delegated to the shared structural body parser.
+
+use std::path::PathBuf;
+
+use super::body::routes::analyze_entry_routes;
+use super::lexer::{Token, TokenKind, lex_argent_source};
+use super::word;
+use super::*;
+use crate::error::{ArgentError, Result};
+
+pub fn parse_module(path: PathBuf, source: String) -> Result<Module> {
+    let tokens = lex_argent_source(&source).map_err(|err| err.with_path(path.clone()))?;
+    Parser { path, source, tokens, pos: 0 }.parse_module()
+}
+
+#[cfg(test)]
+mod tests;
+
+struct Parser {
+    path: PathBuf,
+    source: String,
+    tokens: Vec<Token>,
+    pos: usize,
+}
+
+impl Parser {
+    fn parse_module(mut self) -> Result<Module> {
+        let mut module = Module {
+            path: self.path.clone(),
+            imports: Vec::new(),
+            consts: Vec::new(),
+            states: Vec::new(),
+            functions: Vec::new(),
+            actors: Vec::new(),
+            actor_enums: Vec::new(),
+            apps: Vec::new(),
+        };
+
+        while !self.is_eof() {
+            if self.check_ident(word::IMPORT) {
+                module.imports.push(self.parse_import()?);
+            } else if self.check_ident(word::CONST) {
+                module.consts.push(self.parse_const()?);
+            } else if self.check_ident(word::STATE) {
+                module.states.push(self.parse_state()?);
+            } else if self.check_ident(word::FN) {
+                module.functions.push(self.parse_function()?);
+            } else if self.check_ident(word::ACTOR) {
+                if self.peek_ident(1, word::ENUM) {
+                    module.actor_enums.push(self.parse_actor_enum()?);
+                } else {
+                    module.actors.push(self.parse_actor()?);
+                }
+            } else if self.check_ident(word::APP) {
+                module.apps.push(self.parse_app()?);
+            } else {
+                return Err(self.error(format!("expected top-level declaration, found {}", self.describe_current())));
+            }
+        }
+
+        Ok(module)
+    }
+
+    fn parse_import(&mut self) -> Result<Import> {
+        self.expect_ident(word::IMPORT)?;
+        if self.consume_ident(word::ACTOR) {
+            let first = self.expect_any_ident()?;
+            let qualified_actor = if self.consume_symbol(':') {
+                self.expect_symbol(':')?;
+                Some(self.expect_any_ident()?)
+            } else {
+                None
+            };
+            self.expect_ident(word::FROM)?;
+            let path = self.expect_string()?;
+            self.expect_symbol(';')?;
+            Ok(match qualified_actor {
+                Some(actor) => Import::AppActor { app: first, actor, path },
+                None => Import::Actor { actor: first, path },
+            })
+        } else if self.consume_ident(word::APP) {
+            let app = self.expect_any_ident()?;
+            self.expect_ident(word::FROM)?;
+            let path = self.expect_string()?;
+            self.expect_symbol(';')?;
+            Ok(Import::App { app, path })
+        } else {
+            let path = self.expect_string()?;
+            self.expect_symbol(';')?;
+            Ok(Import::Module { path })
+        }
+    }
+
+    fn parse_const(&mut self) -> Result<ConstDecl> {
+        self.expect_ident(word::CONST)?;
+        let ty = self.parse_type()?;
+        let name = self.expect_any_ident()?;
+        self.expect_symbol('=')?;
+        let value_start = self.current().span.start;
+        while !self.check_symbol(';') && !self.is_eof() {
+            self.advance();
+        }
+        let value_end = self.current().span.start;
+        self.expect_symbol(';')?;
+        Ok(ConstDecl { ty, name, value: self.source[value_start..value_end].trim().to_string() })
+    }
+
+    fn parse_state(&mut self) -> Result<StateDecl> {
+        self.expect_ident(word::STATE)?;
+        let name = self.expect_any_ident()?;
+        let expands = if self.consume_ident(word::EXPANDS) { Some(self.expect_any_ident()?) } else { None };
+        self.expect_symbol('{')?;
+        let mut fields = Vec::new();
+        let mut digest_expansions = Vec::new();
+        while !self.check_symbol('}') {
+            if expands.is_some() {
+                let field = self.expect_any_ident()?;
+                self.expect_symbol(':')?;
+                let state = self.expect_any_ident()?;
+                self.expect_symbol(';')?;
+                digest_expansions.push(StateDigestExpansionDecl { field, state });
+            } else if self.consume_ident(word::VIRTUAL) {
+                let name = self.expect_any_ident()?;
+                self.expect_symbol(';')?;
+                fields.push(FieldDecl { ty: TypeRef::array("byte", 32), name, virtual_slot: true });
+            } else {
+                let ty = self.parse_type()?;
+                let name = self.expect_any_ident()?;
+                self.expect_symbol(';')?;
+                fields.push(FieldDecl { ty, name, virtual_slot: false });
+            }
+        }
+        self.expect_symbol('}')?;
+        let expansion = expands.map(|base| StateExpansionDecl { base, digests: digest_expansions });
+        Ok(StateDecl { name, fields, expansion })
+    }
+
+    fn parse_function(&mut self) -> Result<FunctionDecl> {
+        self.expect_ident(word::FN)?;
+        let name = self.expect_any_ident()?;
+        let params = self.parse_param_list()?;
+        let return_ty = if self.consume_arrow() { Some(self.parse_type()?) } else { None };
+        let body = self.consume_block_text()?;
+        Ok(FunctionDecl { name, params, return_ty, body })
+    }
+
+    fn parse_actor(&mut self) -> Result<ActorDecl> {
+        self.expect_ident(word::ACTOR)?;
+        let name = self.expect_any_ident()?;
+        self.expect_ident(word::OWNS)?;
+        let state = self.expect_any_ident()?;
+        self.expect_symbol('{')?;
+        let mut functions = Vec::new();
+        let mut entries = Vec::new();
+        while !self.check_symbol('}') {
+            if self.check_ident(word::FN) {
+                functions.push(self.parse_function()?);
+            } else {
+                entries.push(self.parse_actor_item()?);
+            }
+        }
+        self.expect_symbol('}')?;
+        Ok(ActorDecl { name, state, functions, entries })
+    }
+
+    fn parse_actor_enum(&mut self) -> Result<ActorEnumDecl> {
+        self.expect_ident(word::ACTOR)?;
+        self.expect_ident(word::ENUM)?;
+        let name = self.expect_any_ident()?;
+        self.expect_symbol('{')?;
+        let mut variants = Vec::new();
+        while !self.check_symbol('}') {
+            variants.push(self.expect_any_ident()?);
+            if self.consume_symbol(';') || self.consume_symbol(',') {
+                continue;
+            }
+            if !self.check_symbol('}') {
+                return Err(self.error(format!("expected `;`, `,`, or `}}`, found {}", self.describe_current())));
+            }
+        }
+        self.expect_symbol('}')?;
+        Ok(ActorEnumDecl { name, variants })
+    }
+
+    fn parse_actor_item(&mut self) -> Result<EntryDecl> {
+        if self.check_ident(word::ENTRY) {
+            self.parse_entry()
+        } else if self.check_ident(word::DELEGATE) {
+            self.parse_delegate()
+        } else {
+            Err(self.error(format!("expected `fn`, `entry`, or `delegate`, found {}", self.describe_current())))
+        }
+    }
+
+    fn parse_entry(&mut self) -> Result<EntryDecl> {
+        self.expect_ident(word::ENTRY)?;
+        let name = self.expect_any_ident()?;
+        let params = self.parse_param_list()?;
+        let (observes, consumes, spawns) = self.parse_entry_clauses()?;
+        self.expect_ident(word::EMITS)?;
+        let emits = self.parse_emits()?;
+        let body = EntryBody::new(self.consume_block_text()?).map_err(|err| err.with_path(self.path.clone()))?;
+        let route_analysis = analyze_entry_routes(&body).map_err(|err| ArgentError::at(&self.path, err.message))?;
+        Ok(EntryDecl {
+            kind: EntryKind::Leader,
+            name,
+            params,
+            consumes,
+            observes,
+            spawns,
+            emits,
+            body,
+            routes: route_analysis.routes,
+            terminal_route_sets: route_analysis.terminal_route_sets,
+        })
+    }
+
+    fn parse_delegate(&mut self) -> Result<EntryDecl> {
+        self.expect_ident(word::DELEGATE)?;
+        let name = self.expect_any_ident()?;
+        let params = self.parse_param_list()?;
+        let (observes, consumes, spawns) = self.parse_entry_clauses()?;
+        let body = EntryBody::new(self.consume_block_text()?).map_err(|err| err.with_path(self.path.clone()))?;
+        let route_analysis = analyze_entry_routes(&body).map_err(|err| ArgentError::at(&self.path, err.message))?;
+        Ok(EntryDecl {
+            kind: EntryKind::Delegate,
+            name,
+            params,
+            consumes,
+            observes,
+            spawns,
+            emits: EmitSpec::None,
+            body,
+            routes: route_analysis.routes,
+            terminal_route_sets: route_analysis.terminal_route_sets,
+        })
+    }
+
+    fn parse_app(&mut self) -> Result<AppDecl> {
+        self.expect_ident(word::APP)?;
+        let name = self.expect_any_ident()?;
+        self.expect_symbol('{')?;
+        let mut actors = Vec::new();
+        while !self.check_symbol('}') {
+            if self.consume_ident(word::ACTOR) {
+                actors.push(self.expect_any_ident()?);
+                self.expect_symbol(';')?;
+            } else {
+                return Err(self.error(format!("expected `actor`, found {}", self.describe_current())));
+            }
+        }
+        self.expect_symbol('}')?;
+        Ok(AppDecl { name, actors })
+    }
+
+    fn parse_param_list(&mut self) -> Result<Vec<ParamDecl>> {
+        self.expect_symbol('(')?;
+        let mut params = Vec::new();
+        while !self.check_symbol(')') {
+            let ty = self.parse_type()?;
+            let name = self.expect_any_ident()?;
+            params.push(ParamDecl { name, ty });
+            if self.consume_symbol(',') {
+                continue;
+            }
+            break;
+        }
+        self.expect_symbol(')')?;
+        Ok(params)
+    }
+
+    fn parse_consumes(&mut self) -> Result<Vec<ConsumeDecl>> {
+        self.expect_ident(word::CONSUMES)?;
+        self.expect_symbol('{')?;
+        let mut consumes = Vec::new();
+        while !self.check_symbol('}') {
+            let name = self.expect_any_ident()?;
+            self.expect_symbol(':')?;
+            let actor = self.expect_any_ident()?;
+            let cardinality = self.parse_cardinality()?;
+            consumes.push(ConsumeDecl { name, actor, cardinality });
+            self.expect_list_separator_or_end('}')?;
+        }
+        self.expect_symbol('}')?;
+        Ok(consumes)
+    }
+
+    fn parse_entry_clauses(&mut self) -> Result<(Vec<ObserveDecl>, Vec<ConsumeDecl>, Vec<SpawnDecl>)> {
+        let mut observes = Vec::new();
+        let mut consumes = Vec::new();
+        let mut spawns = Vec::new();
+        let mut parsed_consumes = false;
+        loop {
+            if self.check_ident(word::OBSERVES) {
+                observes.push(self.parse_observes()?);
+            } else if self.check_ident(word::SPAWNS) {
+                spawns.push(self.parse_spawns()?);
+            } else if self.check_ident(word::CONSUMES) {
+                if parsed_consumes {
+                    return Err(self.error("entry declares `consumes` more than once"));
+                }
+                consumes = self.parse_consumes()?;
+                parsed_consumes = true;
+            } else {
+                break;
+            }
+        }
+        Ok((observes, consumes, spawns))
+    }
+
+    fn parse_spawns(&mut self) -> Result<SpawnDecl> {
+        self.expect_ident(word::SPAWNS)?;
+        let name = self.expect_any_ident()?;
+        self.expect_ident(word::BY)?;
+        let covenant = self.expect_any_ident()?;
+        self.expect_symbol('{')?;
+        self.expect_ident(word::OUTPUTS)?;
+        self.expect_symbol('{')?;
+        let mut outputs = Vec::new();
+        while !self.check_symbol('}') {
+            let name = self.expect_any_ident()?;
+            self.expect_symbol(':')?;
+            let (actor, cardinality) = self.take_clause_actor_target()?;
+            outputs.push(SpawnOutputDecl { name, actor, cardinality, group_index: outputs.len() });
+            self.expect_list_separator_or_end('}')?;
+        }
+        self.expect_symbol('}')?;
+        self.expect_symbol('}')?;
+        Ok(SpawnDecl { name, covenant, outputs })
+    }
+
+    fn parse_observes(&mut self) -> Result<ObserveDecl> {
+        self.expect_ident(word::OBSERVES)?;
+        let name = self.expect_any_ident()?;
+        self.expect_ident(word::BY)?;
+        let covenant_expr_start = self.current().span.start;
+        while !self.check_symbol('{') && !self.is_eof() {
+            self.advance();
+        }
+        let covenant_expr = self.source[covenant_expr_start..self.current().span.start].trim().to_string();
+        if covenant_expr.is_empty() {
+            return Err(self.error("observes clause has an empty covenant expression"));
+        }
+
+        self.expect_symbol('{')?;
+        let mut inputs = None;
+        let mut outputs = None;
+        while !self.check_symbol('}') {
+            if self.check_ident(word::INPUTS) {
+                if inputs.is_some() {
+                    return Err(self.error("observes clause declares `inputs` more than once"));
+                }
+                inputs = Some(self.parse_observed_actor_list(word::INPUTS)?);
+            } else if self.check_ident(word::OUTPUTS) {
+                if outputs.is_some() {
+                    return Err(self.error("observes clause declares `outputs` more than once"));
+                }
+                outputs = Some(self.parse_observed_actor_list(word::OUTPUTS)?);
+            } else {
+                return Err(self.error(format!("expected `inputs` or `outputs`, found {}", self.describe_current())));
+            }
+        }
+        self.expect_symbol('}')?;
+
+        Ok(ObserveDecl { name, covenant_expr, inputs: inputs.unwrap_or_default(), outputs: outputs.unwrap_or_default() })
+    }
+
+    fn parse_observed_actor_list(&mut self, section: &str) -> Result<Vec<ObservedActorDecl>> {
+        self.expect_ident(section)?;
+        self.expect_symbol('{')?;
+        let mut actors = Vec::new();
+        while !self.check_symbol('}') {
+            let name = self.expect_any_ident()?;
+            self.expect_symbol(':')?;
+            let (actor, open_state, cardinality) = if self.consume_ident(word::ACTOR_TYPE) {
+                if section != word::INPUTS {
+                    return Err(self.error("open observed actor bindings are only declared in `inputs`"));
+                }
+                self.expect_symbol('<')?;
+                let state = self.expect_any_ident()?;
+                self.expect_symbol('>')?;
+                self.expect_ident(word::AS)?;
+                let actor = self.expect_any_ident()?;
+                let cardinality = self.parse_cardinality()?;
+                (actor, Some(state), cardinality)
+            } else {
+                let (actor, cardinality) = self.take_clause_actor_target()?;
+                (actor, None, cardinality)
+            };
+            actors.push(ObservedActorDecl { name, actor, open_state, cardinality });
+            self.expect_list_separator_or_end('}')?;
+        }
+        self.expect_symbol('}')?;
+        Ok(actors)
+    }
+
+    fn take_clause_actor_target(&mut self) -> Result<(String, Cardinality)> {
+        let token_start = self.pos;
+        let start = self.current().span.start;
+        let mut depth = 0usize;
+        while !self.is_eof() {
+            let token = self.current().clone();
+            match token.kind {
+                TokenKind::Symbol('{') | TokenKind::Symbol('(') | TokenKind::Symbol('[') | TokenKind::Symbol('<') => {
+                    depth += 1;
+                    self.advance();
+                }
+                TokenKind::Symbol(',' | '}' | ';') if depth == 0 => {
+                    let token_end = self.pos;
+                    let cardinality_start = self.cardinality_suffix_start(token_start, token_end);
+                    let actor_end = cardinality_start.map(|pos| self.tokens[pos].span.start).unwrap_or(token.span.start);
+                    let actor = self.source[start..actor_end].trim().to_string();
+                    if actor.is_empty() {
+                        return Err(self.error("actor target is empty"));
+                    }
+                    let cardinality = if let Some(cardinality_start) = cardinality_start {
+                        self.pos = cardinality_start;
+                        let cardinality = self.parse_cardinality()?;
+                        debug_assert_eq!(self.pos, token_end);
+                        cardinality
+                    } else {
+                        Cardinality::One
+                    };
+                    return Ok((actor, cardinality));
+                }
+                TokenKind::Symbol('}') | TokenKind::Symbol(')') | TokenKind::Symbol(']') | TokenKind::Symbol('>') => {
+                    depth = depth.saturating_sub(1);
+                    self.advance();
+                }
+                _ => self.advance(),
+            }
+        }
+        Err(self.error("unterminated actor target"))
+    }
+
+    /// Identify a trailing `[minimum..=maximum]` without confusing brackets
+    /// that are part of the actor target expression.
+    fn cardinality_suffix_start(&self, token_start: usize, token_end: usize) -> Option<usize> {
+        let close = token_end.checked_sub(1)?;
+        if !matches!(self.tokens.get(close)?.kind, TokenKind::Symbol(']')) {
+            return None;
+        }
+
+        let mut depth = 0usize;
+        let mut open = None;
+        for pos in (token_start..=close).rev() {
+            match self.tokens[pos].kind {
+                TokenKind::Symbol(']') => depth += 1,
+                TokenKind::Symbol('[') => {
+                    depth = depth.checked_sub(1)?;
+                    if depth == 0 {
+                        open = Some(pos);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let open = open?;
+        self.has_range_marker(open + 1, close).then_some(open)
+    }
+
+    fn has_range_marker(&self, start: usize, end: usize) -> bool {
+        (start..end.saturating_sub(1)).any(|pos| {
+            matches!(self.tokens[pos].kind, TokenKind::Symbol('.')) && matches!(self.tokens[pos + 1].kind, TokenKind::Symbol('.'))
+        })
+    }
+
+    fn parse_type(&mut self) -> Result<TypeRef> {
+        let name = self.expect_any_ident()?;
+        self.parse_type_tail(name)
+    }
+
+    fn parse_type_tail(&mut self, name: String) -> Result<TypeRef> {
+        if name == word::ACTOR_TYPE && self.consume_symbol('<') {
+            let state = self.expect_any_ident()?;
+            self.expect_symbol('>')?;
+            Ok(TypeRef::actor_type(state))
+        } else if self.consume_symbol('[') {
+            if self.consume_symbol(']') {
+                return Ok(TypeRef::dynamic_array(name));
+            }
+            let len = self.expect_number()?.parse::<usize>().map_err(|_| self.error("invalid array length"))?;
+            self.expect_symbol(']')?;
+            Ok(TypeRef::array(name, len))
+        } else {
+            Ok(TypeRef::new(name))
+        }
+    }
+
+    fn parse_emits(&mut self) -> Result<EmitSpec> {
+        if self.consume_ident(word::NONE) {
+            Ok(EmitSpec::None)
+        } else if self.check_symbol('{') {
+            self.expect_symbol('{')?;
+            let mut outputs = Vec::new();
+            while !self.check_symbol('}') {
+                let name = self.expect_any_ident()?;
+                self.expect_symbol(':')?;
+                let actors = self.parse_actor_union()?;
+                let cardinality = self.parse_cardinality()?;
+                let auth_index = outputs.len();
+                outputs.push(EmitOutput { name, actors, cardinality, auth_index });
+                self.expect_list_separator_or_end('}')?;
+            }
+            self.expect_symbol('}')?;
+            Ok(EmitSpec::Outputs(outputs))
+        } else {
+            let name = self.expect_any_ident()?;
+            if name == word::ONE && !self.check_symbol(':') {
+                return Err(self.error("`emits one Type` has been removed; declare a named output with `emits name: Type`"));
+            }
+            self.expect_symbol(':')?;
+            let actors = self.parse_actor_union_until_body()?;
+            let cardinality = self.parse_cardinality()?;
+            Ok(EmitSpec::Outputs(vec![EmitOutput { name, actors, cardinality, auth_index: 0 }]))
+        }
+    }
+
+    fn parse_actor_union_until_body(&mut self) -> Result<Vec<String>> {
+        self.parse_actor_union()
+    }
+
+    fn parse_actor_union(&mut self) -> Result<Vec<String>> {
+        let mut actors = Vec::new();
+        actors.push(self.expect_any_ident()?);
+        while self.consume_symbol('|') {
+            actors.push(self.expect_any_ident()?);
+        }
+        Ok(actors)
+    }
+
+    fn parse_cardinality(&mut self) -> Result<Cardinality> {
+        if !self.consume_symbol('[') {
+            return Ok(Cardinality::One);
+        }
+        let minimum = self.parse_cardinality_bound()?;
+        self.expect_symbol('.')?;
+        self.expect_symbol('.')?;
+        self.expect_symbol('=')?;
+        let maximum = self.parse_cardinality_bound()?;
+        self.expect_symbol(']')?;
+        Ok(Cardinality::Range { minimum, maximum })
+    }
+
+    fn parse_cardinality_bound(&mut self) -> Result<CardinalityBound> {
+        let negative = self.consume_symbol('-');
+        match self.current().kind.clone() {
+            TokenKind::Number(value) => {
+                self.advance();
+                let value = value.parse::<i64>().map_err(|_| self.error("range bound integer is too large"))?;
+                let value =
+                    if negative { value.checked_neg().ok_or_else(|| self.error("range bound integer is too small"))? } else { value };
+                Ok(CardinalityBound::Literal(value))
+            }
+            TokenKind::Ident(name) if !negative => {
+                self.advance();
+                Ok(CardinalityBound::Const(name))
+            }
+            _ => Err(self.error("range bound must be an integer literal or const identifier")),
+        }
+    }
+
+    fn consume_block_text(&mut self) -> Result<String> {
+        self.expect_symbol('{')?;
+        let start = self.previous().span.end;
+        let mut depth = 1usize;
+        while !self.is_eof() {
+            let token = self.current().clone();
+            match token.kind {
+                TokenKind::Symbol('{') => {
+                    depth += 1;
+                    self.advance();
+                }
+                TokenKind::Symbol('}') => {
+                    depth -= 1;
+                    if depth == 0 {
+                        let end = token.span.start;
+                        self.advance();
+                        return Ok(self.source[start..end].to_string());
+                    }
+                    self.advance();
+                }
+                _ => self.advance(),
+            }
+        }
+        Err(self.error("unterminated block"))
+    }
+
+    fn expect_ident(&mut self, expected: &str) -> Result<()> {
+        match &self.current().kind {
+            TokenKind::Ident(actual) if actual == expected => {
+                self.advance();
+                Ok(())
+            }
+            _ => Err(self.error(format!("expected `{expected}`, found {}", self.describe_current()))),
+        }
+    }
+
+    fn consume_ident(&mut self, expected: &str) -> bool {
+        match &self.current().kind {
+            TokenKind::Ident(actual) if actual == expected => {
+                self.advance();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn peek_ident(&self, offset: usize, expected: &str) -> bool {
+        matches!(self.tokens.get(self.pos + offset).map(|token| &token.kind), Some(TokenKind::Ident(actual)) if actual == expected)
+    }
+
+    fn expect_any_ident(&mut self) -> Result<String> {
+        match self.current().kind.clone() {
+            TokenKind::Ident(name) => {
+                self.advance();
+                Ok(name)
+            }
+            _ => Err(self.error(format!("expected identifier, found {}", self.describe_current()))),
+        }
+    }
+
+    fn check_ident(&self, expected: &str) -> bool {
+        matches!(&self.current().kind, TokenKind::Ident(actual) if actual == expected)
+    }
+
+    fn expect_number(&mut self) -> Result<String> {
+        match self.current().kind.clone() {
+            TokenKind::Number(value) => {
+                self.advance();
+                Ok(value)
+            }
+            _ => Err(self.error(format!("expected number, found {}", self.describe_current()))),
+        }
+    }
+
+    fn expect_string(&mut self) -> Result<String> {
+        match self.current().kind.clone() {
+            TokenKind::Str(value) => {
+                self.advance();
+                Ok(value)
+            }
+            _ => Err(self.error(format!("expected string, found {}", self.describe_current()))),
+        }
+    }
+
+    fn expect_symbol(&mut self, expected: char) -> Result<()> {
+        match self.current().kind {
+            TokenKind::Symbol(actual) if actual == expected => {
+                self.advance();
+                Ok(())
+            }
+            _ => Err(self.error(format!("expected `{expected}`, found {}", self.describe_current()))),
+        }
+    }
+
+    fn consume_symbol(&mut self, expected: char) -> bool {
+        match self.current().kind {
+            TokenKind::Symbol(actual) if actual == expected => {
+                self.advance();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn expect_list_separator_or_end(&mut self, end: char) -> Result<()> {
+        if self.consume_symbol(',') || self.check_symbol(end) {
+            Ok(())
+        } else {
+            Err(self.error(format!("expected `,` or `{end}`, found {}", self.describe_current())))
+        }
+    }
+
+    fn check_symbol(&self, expected: char) -> bool {
+        matches!(self.current().kind, TokenKind::Symbol(actual) if actual == expected)
+    }
+
+    fn consume_arrow(&mut self) -> bool {
+        if matches!(self.current().kind, TokenKind::Arrow) {
+            self.advance();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn current(&self) -> &Token {
+        &self.tokens[self.pos]
+    }
+
+    fn previous(&self) -> &Token {
+        &self.tokens[self.pos - 1]
+    }
+
+    fn advance(&mut self) {
+        if !self.is_eof() {
+            self.pos += 1;
+        }
+    }
+
+    fn is_eof(&self) -> bool {
+        matches!(self.current().kind, TokenKind::Eof)
+    }
+
+    fn describe_current(&self) -> String {
+        match &self.current().kind {
+            TokenKind::Ident(value) => format!("identifier `{value}`"),
+            TokenKind::Number(value) => format!("number `{value}`"),
+            TokenKind::Str(value) => format!("string \"{value}\""),
+            TokenKind::Arrow => "`->`".to_string(),
+            TokenKind::LeftArrow => "`<-`".to_string(),
+            TokenKind::Symbol(value) => format!("`{value}`"),
+            TokenKind::Eof => "end of file".to_string(),
+        }
+    }
+
+    fn error(&self, message: impl Into<String>) -> ArgentError {
+        ArgentError::at_source(&self.path, &self.source, self.current().span.start, message)
+    }
+}

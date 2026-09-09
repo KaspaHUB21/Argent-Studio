@@ -1,0 +1,53 @@
+state AgentCapsule {
+    byte[32] controller_id;
+    byte[32] caps_digest;
+    int energy;
+}
+
+state CellState {
+    cov_id agent_covid;
+    actor_type<AgentCapsule> agent_type;
+    int tick;
+}
+
+actor Cell owns CellState {
+    entry advance()
+    observes remote by self.agent_covid {
+        inputs {
+            agent: self.agent_type,
+        }
+
+        outputs {
+            agent: self.agent_type,
+        }
+    }
+    emits {
+        cell: Cell,
+    } {
+        AgentCapsule prev_state = state(remote.inputs.agent);
+        require(prev_state.controller_id == self.cov_id);
+
+        AgentCapsule next_state = {
+            controller_id: prev_state.controller_id,
+            caps_digest: prev_state.caps_digest,
+            energy: prev_state.energy - 1,
+        };
+
+        require remote.outputs become {
+            agent <- self.agent_type(next_state),
+        };
+
+        CellState next_cell = {
+            agent_covid: agent_covid,
+            agent_type: agent_type,
+            tick: tick + 1,
+        };
+
+        unrestricted(cell.value);
+        become cell <- Cell(next_cell);
+    }
+}
+
+app Test {
+    actor Cell;
+}

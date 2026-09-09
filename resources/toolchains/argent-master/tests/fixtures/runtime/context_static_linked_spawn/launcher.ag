@@ -1,0 +1,55 @@
+import app ChildApp from "./child.ag";
+
+state LauncherState {
+    int launches;
+}
+
+state RelayState {
+    int forwards;
+}
+
+actor Launcher owns LauncherState {
+    entry launch(cov_id source_id, int amount)
+    observes source by source_id {
+        inputs {
+            child: ChildApp::Child,
+        }
+    }
+    spawns children by child_id {
+        outputs {
+            child: ChildApp::Child,
+        }
+    }
+    emits next: Launcher {
+        ChildState source_state = state(source.inputs.child);
+        ChildState child_state = {
+            amount: source_state.amount + amount,
+        };
+        LauncherState next_state = {
+            launches: launches + 1,
+        };
+
+        unrestricted(children.outputs.child.value);
+        require children.outputs become {
+            child <- ChildApp::Child(child_state),
+        };
+        unrestricted(next.value);
+        become next <- Launcher(next_state);
+    }
+}
+
+actor Relay owns RelayState {
+    entry forward(int launches) emits next: Launcher {
+        LauncherState next_state = {
+            launches: launches,
+        };
+
+        unrestricted(next.value);
+        become next <- Launcher(next_state);
+    }
+}
+
+app LauncherApp {
+    actor Launcher;
+    actor Relay;
+}

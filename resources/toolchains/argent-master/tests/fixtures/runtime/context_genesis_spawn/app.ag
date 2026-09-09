@@ -1,0 +1,54 @@
+state ControllerState {
+    actor_type<PairState> pair_type;
+    int launches;
+}
+
+state PairState {
+    int amount;
+}
+
+actor Controller owns ControllerState {
+    entry launch(int left_amount, int right_amount)
+    spawns new_pair by pair_id {
+        outputs {
+            left: self.pair_type,
+            right: self.pair_type,
+        }
+    }
+    emits next: Controller {
+        PairState left_state = {
+            amount: left_amount,
+        };
+        PairState right_state = {
+            amount: right_amount,
+        };
+        ControllerState next_state = {
+            pair_type: pair_type,
+            launches: launches + 1,
+        };
+
+        unrestricted(new_pair.outputs.left.value);
+        unrestricted(new_pair.outputs.right.value);
+        require new_pair.outputs become {
+            left <- self.pair_type(left_state),
+            right <- self.pair_type(right_state),
+        };
+        unrestricted(next.value);
+        become next <- Controller(next_state);
+    }
+}
+
+actor Pair owns PairState {
+    entry keep() emits next: Pair {
+        unrestricted(next.value);
+        become next <- self;
+    }
+}
+
+app ControllerApp {
+    actor Controller;
+}
+
+app PairApp {
+    actor Pair;
+}

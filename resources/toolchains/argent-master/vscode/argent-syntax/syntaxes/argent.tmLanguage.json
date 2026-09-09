@@ -1,0 +1,80 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Argent",
+  "scopeName": "source.argent",
+  "patterns": [
+    {
+      "include": "#argent-builtins"
+    },
+    {
+      "include": "#argent-keywords"
+    },
+    {
+      "include": "#argent-assertions"
+    },
+    {
+      "include": "#argent-actors"
+    },
+    {
+      "include": "source.rust"
+    }
+  ],
+  "repository": {
+    "argent-keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.argent",
+          "match": "\\b(become|consumes|emits|observes|return|spawns)\\b"
+        },
+        {
+          "name": "keyword.declaration.argent",
+          "match": "\\b(as|by|else|from|if|inputs|none|outputs)\\b"
+        },
+        {
+          "name": "keyword.declaration.argent",
+          "match": "\\b(actor|app|const|delegate|entry|enum|expands|fn|import|owns|state|virtual)\\b"
+        },
+        {
+          "name": "constant.language.argent",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "variable.language.argent",
+          "match": "\\b(self)\\b"
+        }
+      ]
+    },
+    "argent-builtins": {
+      "patterns": [
+        {
+          "name": "support.function.argent",
+          "match": "\\b(state|digest)\\b(?=\\s*\\()"
+        },
+        {
+          "name": "support.function.argent",
+          "match": "\\b(Op[A-Za-z0-9_]+|op_[A-Za-z0-9_]+|co_spent|sha256|blake2b|blake2bWithKey|blake3|blake3WithKey|templateHash|checkSig|checkSigEcdsa|checkMsgSig|checkMsgSigEcdsa)\\b"
+        },
+        {
+          "name": "storage.type.argent",
+          "match": "\\b(actor_type|bool|byte|bytes|cov_id|datasig|int|pubkey|sig|string|temporal)\\b"
+        }
+      ]
+    },
+    "argent-assertions": {
+      "patterns": [
+        {
+          "name": "keyword.other.assertion.argent",
+          "match": "\\b(require|unrestricted)\\b"
+        }
+      ]
+    },
+    "argent-actors": {
+      "patterns": [
+        {
+          "name": "entity.name.type.argent",
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,1 @@
+{"identifier":"default","description":"Main editor window native dialogs","windows":["main"],"permissions":["core:default","core:window:allow-destroy","dialog:default"]}

@@ -1,0 +1,34 @@
+import {test,expect} from '@playwright/test';
+import {createServer} from 'vite';
+let vite,url;
+test.beforeAll(async()=>{vite=await createServer({server:{host:'127.0.0.1',port:1442,strictPort:false,hmr:false,watch:null},logLevel:'error'});await vite.listen();url=vite.resolvedUrls.local[0];});
+test.afterAll(async()=>vite?.close());
+test.use({channel:'msedge'});
+test('editor search and assistant controls switch languages while preserving message content',async({page})=>{
+ await page.route('**/translation-fixture',route=>route.fulfill({contentType:'text/html',body:'<div id="editor"></div><div id="assistant"></div>'}));
+ await page.goto(url+'translation-fixture');
+ await page.evaluate(async()=>{
+  const {createEditor}=await import('/frontend/editor.js'),{mountAssistant}=await import('/frontend/assistant.js'),{openSearchPanel,closeSearchPanel}=await import('/node_modules/@codemirror/search/dist/index.js');
+  const settings={aiEnabled:true,language:'de',model:'test',hasAdminKey:false};
+  const editor=createEditor(document.querySelector('#editor'),{text:'app Tickets {}',getSettings:()=>settings});
+  const assistant=mountAssistant(document.querySelector('#assistant'),{getSettings:()=>settings,getDocuments:()=>[],invoke:async()=>{throw Error('Enter an API key in Settings first');}});
+  window.translationFixture={settings,editor,assistant,openSearchPanel,closeSearchPanel};openSearchPanel(editor.view);
+ });
+ await expect(page.getByPlaceholder('Suchen',{exact:true})).toBeVisible();
+ await page.getByLabel('KI-Nachricht',{exact:true}).fill('Meine Nachricht');
+ await page.getByRole('button',{name:'Senden',exact:true}).click();
+ await expect(page.locator('.ai-message.error')).toContainText('Bitte zuerst einen API-Schlüssel');
+ await page.evaluate(()=>{const f=window.translationFixture;f.settings.language='en';f.editor.refresh();f.assistant.refresh();f.closeSearchPanel(f.editor.view);f.openSearchPanel(f.editor.view);});
+ await expect(page.getByPlaceholder('Find',{exact:true})).toBeVisible();
+ await expect(page.getByLabel('AI message',{exact:true})).toBeVisible();
+ await expect(page.locator('.ai-message.error')).toContainText('Enter an API key in Settings first');
+ await expect(page.locator('.ai-message.user strong')).toHaveText('YOU');
+ await expect(page.locator('.ai-message.user .ai-message-text')).toHaveText('Meine Nachricht');
+ await expect(page.locator('.ai-message.user button')).toHaveText('Copy');
+ await expect(page.locator('.ai-usage')).toContainText('Output');
+ await page.evaluate(()=>{const f=window.translationFixture;f.settings.language='de';f.editor.refresh();f.assistant.refresh();f.closeSearchPanel(f.editor.view);f.openSearchPanel(f.editor.view);});
+ await expect(page.getByPlaceholder('Suchen',{exact:true})).toBeVisible();
+ await expect(page.getByLabel('KI-Nachricht',{exact:true})).toBeVisible();
+ await expect(page.locator('.ai-message.error')).toContainText('Bitte zuerst einen API-Schlüssel');
+ await expect(page.locator('.ai-usage')).toContainText('Ausgabe');
+});

@@ -1,0 +1,65 @@
+import "./types.ag";
+
+// Actor imports are template capabilities for multi-output settlement.
+import actor Player from "./player.ag";
+
+actor StonesSettle owns SettleState {
+    entry settle() consumes {
+        player_a_in: Player,
+        player_b_in: Player,
+    } emits {
+        player_a_out: Player,
+        player_b_out: Player,
+    } {
+        require(status == A_WIN || status == B_WIN);
+
+        byte[32] player_a_ref = player_ref(player_a_in.owner, player_a_in.player_id);
+        byte[32] player_b_ref = player_ref(player_b_in.owner, player_b_in.player_id);
+        require(player_a_ref == player_a);
+        require(player_b_ref == player_b);
+
+        require(player_a_in.open_games > 0);
+        require(player_b_in.open_games > 0);
+
+        int player_a_wins = player_a_in.wins;
+        int player_a_losses = player_a_in.losses;
+        int player_b_wins = player_b_in.wins;
+        int player_b_losses = player_b_in.losses;
+
+        if (status == A_WIN) {
+            player_a_wins = player_a_wins + 1;
+            player_b_losses = player_b_losses + 1;
+            require(player_a_out.value == player_a_in.value + self.value);
+            require(player_b_out.value == player_b_in.value);
+        } else {
+            player_b_wins = player_b_wins + 1;
+            player_a_losses = player_a_losses + 1;
+            require(player_a_out.value == player_a_in.value);
+            require(player_b_out.value == player_b_in.value + self.value);
+        }
+
+        PlayerState next_player_a = {
+            owner: player_a_in.owner,
+            player_id: player_a_in.player_id,
+            open_games: player_a_in.open_games - 1,
+            games: player_a_in.games + 1,
+            wins: player_a_wins,
+            losses: player_a_losses,
+        };
+
+        PlayerState next_player_b = {
+            owner: player_b_in.owner,
+            player_id: player_b_in.player_id,
+            open_games: player_b_in.open_games - 1,
+            games: player_b_in.games + 1,
+            wins: player_b_wins,
+            losses: player_b_losses,
+        };
+
+        // Atomic `become` emits both updated Player actors together.
+        become {
+            player_a_out <- Player(next_player_a),
+            player_b_out <- Player(next_player_b),
+        };
+    }
+}

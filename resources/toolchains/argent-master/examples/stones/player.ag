@@ -1,0 +1,93 @@
+import "./types.ag";
+
+// Actor imports are template capabilities for cross-actor outputs.
+import actor StonesGame from "./game.ag";
+import actor StonesSettle from "./settle.ag";
+
+actor Player owns PlayerState {
+    entry start_game(
+        sig owner_sig,
+        pubkey owner_pk,
+        int first_turn,
+        int pile,
+        int max_take
+    ) consumes {
+        // Consumed actors join the same coordinated transition as `self`.
+        opponent: Player,
+    } emits {
+        self_out: Player,
+        opponent_out: Player,
+        game: StonesGame,
+    } {
+        require(blake2b(byte[](owner_pk)) == owner);
+        require(checkSig(owner_sig, owner_pk));
+
+        require(opponent.player_id != player_id);
+        require(first_turn == SIDE_A || first_turn == SIDE_B);
+        require(pile > 0);
+        require(max_take > 0);
+
+        byte[32] self_ref = player_ref(owner, player_id);
+        byte[32] opponent_ref = player_ref(opponent.owner, opponent.player_id);
+
+        PlayerState next_self = {
+            owner: owner,
+            player_id: player_id,
+            open_games: open_games + 1,
+            games: games,
+            wins: wins,
+            losses: losses,
+        };
+
+        PlayerState next_opponent = {
+            owner: opponent.owner,
+            player_id: opponent.player_id,
+            open_games: opponent.open_games + 1,
+            games: opponent.games,
+            wins: opponent.wins,
+            losses: opponent.losses,
+        };
+
+        GameState next_game = {
+            player_a: self_ref,
+            player_b: opponent_ref,
+            pile: pile,
+            max_take: max_take,
+            turn: first_turn,
+        };
+
+        require(self_out.value == self.value);
+        require(opponent_out.value == opponent.value);
+        require(game.value > 0);
+
+        // Multi-output `become` is an atomic successor set.
+        become {
+            self_out <- Player(next_self),
+            opponent_out <- Player(next_opponent),
+            game <- StonesGame(next_game),
+        };
+    }
+
+    // Delegate entries are non-leader checks in a coordinated transition.
+    delegate accept_start(sig owner_sig, pubkey owner_pk) consumes {
+        starter: Player,
+    } {
+        require(blake2b(byte[](owner_pk)) == owner);
+        require(checkSig(owner_sig, owner_pk));
+
+        require(starter.player_id != player_id);
+    }
+
+    delegate settle() consumes {
+        settle: StonesSettle,
+    } {
+        byte[32] self_ref = player_ref(owner, player_id);
+        require(self_ref == settle.player_a || self_ref == settle.player_b);
+    }
+
+    entry retire(sig owner_sig, pubkey owner_pk) emits none {
+        require(blake2b(byte[](owner_pk)) == owner);
+        require(checkSig(owner_sig, owner_pk));
+        require(open_games == 0);
+    }
+}

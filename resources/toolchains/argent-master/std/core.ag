@@ -1,0 +1,17 @@
+/// Returns a domain-separated UID for the current actor invocation.
+///
+/// The UID is stable within one actor invocation and globally
+/// collision-resistant across invocations. Repeated calls with the same
+/// domain return the same value.
+///
+/// The domain must contain between 1 and 64 bytes.
+fn invocation_uid(byte[] domain) -> byte[32] {
+    require(domain.length > 0);
+
+    byte[36] outpoint = byte[36](
+        OpOutpointTxId(this.activeInputIndex)
+            + (OpOutpointIndex(this.activeInputIndex) as byte[4])
+    );
+
+    return blake2bWithKey(byte[](outpoint), domain);
+}

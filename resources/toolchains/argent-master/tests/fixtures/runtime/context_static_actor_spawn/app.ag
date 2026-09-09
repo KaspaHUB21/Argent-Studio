@@ -1,0 +1,54 @@
+state LauncherState {
+    int launches;
+}
+
+state ChildState {
+    int amount;
+}
+
+actor Launcher owns LauncherState {
+    entry launch(int amount)
+    consumes {
+        source: Child,
+    }
+    spawns child_group by child_id {
+        outputs {
+            child: Child,
+        }
+    }
+    emits next: Launcher {
+        ChildState child_state = {
+            amount: source.amount + amount,
+        };
+        LauncherState next_state = {
+            launches: launches + 1,
+        };
+
+        unrestricted(child_group.outputs.child.value);
+        require child_group.outputs become {
+            child <- Child(child_state),
+        };
+        unrestricted(next.value);
+        become next <- Launcher(next_state);
+    }
+}
+
+actor Child owns ChildState {
+    delegate support_launch()
+    consumes {
+        launcher: Launcher,
+    } {}
+
+    entry return_to_launcher() emits next: Launcher {
+        LauncherState next_state = {
+            launches: 0,
+        };
+        unrestricted(next.value);
+        become next <- Launcher(next_state);
+    }
+}
+
+app StaticActorSpawn {
+    actor Launcher;
+    actor Child;
+}
