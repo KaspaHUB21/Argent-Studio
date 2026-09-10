@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.45.5
+
+- Preserve structure block proportions and zoom while resizing the build output and diagram panes.
+
+- Update the bundled compiler and transaction runtime to SilverScript 1.0.0.
+- Restore saved build files for the selected project and clear output and errors when switching projects.
+
 ## 0.45.4
 
 - Move Project, Build / results and AI assistant controls into the second toolbar for direct access.

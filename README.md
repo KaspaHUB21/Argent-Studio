@@ -48,7 +48,7 @@ Windows has been exercised during development. macOS support is prepared in the 
 
 Development projects use the local `projects` directory. Portable Windows builds use a `projects` directory beside the launcher or executable. macOS bundles use `Documents/Argent Studio/projects`. Set `ARGENT_PROJECTS_DIR` to an absolute directory to override this location.
 
-The four examples are seeded from `resources/examples/catalog` without overwriting existing projects. Reopening an example reuses its existing folder. Use **Duplicate project** to create a separately named copy. Generated files belong in each project's `build` directory and are available from **Generated files**. Keep recent builds and use the build cleanup action when needed.
+The four examples are seeded from `resources/examples/catalog` without overwriting existing projects. Reopening an example reuses its existing folder. Use **Duplicate project** to create a separately named copy. Generated files belong in each project's `build` directory and are available from **Generated files**. Opening a project clears the previous project's output and errors and shows files from the newest saved build, if present. Saved builds are for inspection; test transactions compile current sources again. Keep recent builds and use the build cleanup action when needed.
 
 ## Continuous integration
 

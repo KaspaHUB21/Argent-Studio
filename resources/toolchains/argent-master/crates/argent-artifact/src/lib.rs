@@ -150,7 +150,7 @@ impl Artifact {
     }
 
     pub fn verify_sil_abi(&self) -> std::result::Result<(), SilAbiVerificationError> {
-        self.sil_abi.verify()
+        self.sil_abi.check_consistency()
     }
 
     /// Verifies that local actor frames are unambiguous under Argent's

@@ -82,7 +82,7 @@ test('example menu reopens existing projects and hides build directories',async(
  await page.locator('#menu-project>summary').click();await page.locator('.examples-menu>summary').click();await page.locator('#example-tickets').click();await expect(page.locator('.document-tab')).toContainText('tickets.ag');
  await page.locator('#menu-project>summary').click();await page.locator('.examples-menu>summary').click();await page.locator('#example-tickets').click();
  const calls=await page.evaluate(()=>window.__FIXTURE_CALLS__);expect(calls.filter(c=>c.command==='open_example')).toHaveLength(2);expect(calls.filter(c=>c.command==='clone_example')).toHaveLength(0);
- await expect(page.locator('#project-tree')).not.toContainText('build');expect(calls.some(c=>c.command==='list_directory'&&c.args.path.endsWith('/build'))).toBe(false);
+ await expect(page.locator('#project-tree')).not.toContainText('build');expect(await page.evaluate(()=>window.__ARGENT_APP__.state.files.some(f=>f.path.includes('/build')))).toBe(false);
 });
 
 for (const language of ['de', 'en']) test(`grouped toolbar navigation and layout in ${language}`, async ({page}) => {
@@ -123,4 +123,63 @@ for (const language of ['de', 'en']) test(`grouped toolbar navigation and layout
  expect(panels.x+panels.width).toBeLessThanOrEqual(1150);
  await expect(page.locator('#panel-assistant')).toBeDisabled();
  await page.screenshot({path:`qa/grouped-view-dark-${language}.png`});
+});
+
+for (const language of ['de','en']) test(`project changes replace build files and clear old errors in ${language}`, async ({page}) => {
+ await page.evaluate(async language => {
+  const a=window.__ARGENT_APP__;a.state.settings.language=language;
+  a.state.build={success:true,output:'C:/fixture/project/build/1',files:[{name:'Old.sil',path:'C:/fixture/project/build/1/Old.sil'}]};
+  a.state.diagnostics=[{path:'C:/fixture/project/old.ag',line:1,column:1,message:'Old error'}];
+  a.applySettings();document.querySelector('#build-output').textContent='Old log';
+  const previous=window.__ARGENT_TEST__.invoke;
+  window.__ARGENT_TEST__.invoke=async (command,args)=>{
+   if(command==='list_directory'&&args.path.startsWith('C:/second')) {
+    if(args.path==='C:/second')return [{name:'build',path:'C:/second/build',isDirectory:true}];
+    if(args.path==='C:/second/build')return [{name:'2',path:'C:/second/build/2',isDirectory:true}];
+    return ['New.sil','artifact.json','manifest.json','editor-build.log'].map(name=>({name,path:'C:/second/build/2/'+name,isDirectory:false}));
+   }
+   if(command==='read_file'&&args.path.startsWith('C:/second'))return args.path.endsWith('.log')?'Second project log':'{}';
+   if(command==='list_directory'&&args.path==='C:/empty')return [];
+   return previous(command,args);
+  };
+  await a.loadProject('C:/second');
+ },language);
+ await expect(page.locator('#build-artifacts')).toContainText('New.sil');
+ await expect(page.locator('#build-artifacts')).not.toContainText('Old.sil');
+ await expect(page.locator('#build-errors')).not.toContainText('Old error');
+ await expect(page.locator('#build-output')).toHaveText('Second project log');
+ expect(await page.evaluate(()=>window.__ARGENT_APP__.state.build.stale)).toBe(true);
+ await page.evaluate(()=>window.__ARGENT_APP__.loadProject('C:/empty'));
+ await expect(page.locator('#build-artifacts')).toBeEmpty();
+ await expect(page.locator('#build-output')).toBeEmpty();
+ expect(await page.evaluate(()=>window.__ARGENT_APP__.state.build)).toBe(null);
+ await expect(page.locator('.document-tab')).toHaveCount(0);
+});
+
+test('expanded structure cards retain their proportions and zoom when resizing build output',async({page})=>{
+ await page.evaluate(()=>{
+  const previous=window.__ARGENT_TEST__.invoke;
+  window.__ARGENT_TEST__.invoke=async(command,args)=>{
+   if(command==='language_request') {
+    const doc=window.__ARGENT_APP__.state.current;
+    const nodes=[{id:'app',kind:'app',name:'Tickets'},{id:'actor',parent:'app',kind:'actor',name:'Ticket'},{id:'entry',parent:'actor',kind:'entry',name:'redeem'}].map(n=>({...n,path:doc.path,start:0,end:doc.text.length,text:doc.text,detail:n.name}));
+    return {nodes,edges:[{from:'app',to:'actor',label:'enthält'},{from:'actor',to:'entry',label:'enthält'}],sources:[doc]};
+   }
+   return previous(command,args);
+  };
+  window.__ARGENT_APP__.setView('structure');
+ });
+ const cards=page.locator('.structure-graph .structure-card');await expect(cards.first()).toBeVisible();
+ await page.getByRole('button',{name:'Alles aufklappen',exact:true}).click();await expect(cards).toHaveCount(3);
+ const card=cards.first().locator('rect');const initial=await card.boundingBox();
+ for(const [selector,dx,dy] of [['#result-splitter',0,-130],['#result-splitter',0,210],['.structure-row-splitter',0,60],['.structure-row-splitter',0,-90],['.structure-column-splitter',70,0]]) {
+  const divider=await page.locator(selector).boundingBox();
+  await page.mouse.move(divider.x+divider.width/2,divider.y+divider.height/2);await page.mouse.down();
+  await page.mouse.move(divider.x+divider.width/2+dx,divider.y+divider.height/2+dy,{steps:12});await page.mouse.up();
+  await expect.poll(async()=>{const b=await card.boundingBox();return Math.abs(b.width/b.height-initial.width/initial.height);}).toBeLessThan(.01);
+  await expect.poll(async()=>Math.abs((await card.boundingBox()).width-initial.width)).toBeLessThan(.5);
+  await expect.poll(async()=>Math.abs((await card.boundingBox()).height-initial.height)).toBeLessThan(.5);
+  await expect(cards).toHaveCount(3);
+ }
+ await page.screenshot({path:'qa/structure-build-resize.png'});
 });

@@ -11,7 +11,7 @@ The compiler source snapshot originates from `https://github.com/argent-lang/arg
 - Example licenses: retained alongside each public template
 - Language-service license: `resources/assets/language/ARGENT-LICENSE`
 
-The compiler's Cargo manifests pin rusty-kaspa and SilverScript Git revisions. The accompanying Cargo lockfile records the resolved transitive dependencies.
+The compiler uses SilverScript v1.0.0 at commit `3ed973335b59269293564805cc2c58a14595ec03`, with the local ABI adapter updated to `check_consistency`. Its rusty-kaspa revision remains `a41a333b08848f41bf737b72592e463a6011b8ac`. The compiler's Cargo manifests pin these revisions. The accompanying Cargo lockfile records the resolved transitive dependencies.
 
 ## Node.js
 
