@@ -46,8 +46,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'pnpm installation failed' }
           rustup toolchain install 1.94.0 --profile minimal
           if ($LASTEXITCODE -ne 0) { throw 'Rust installation failed' }
-          pnpm config set store-dir .pnpm-store --global
-          if ($LASTEXITCODE -ne 0) { throw 'pnpm store configuration failed' }
 
       - name: Cache dependencies and native builds
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -65,7 +63,7 @@ jobs:
             windows-2022-rust-1.94.0-node-24-v1-
 
       - name: Install JavaScript dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --store-dir .pnpm-store
 
       - name: Build compiler and transaction runtime
         run: node scripts/build-runtime.mjs

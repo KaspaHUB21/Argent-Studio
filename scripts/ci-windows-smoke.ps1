@@ -97,4 +97,3 @@ try {
     $env:APPDATA = $priorAppData
     $summary | ConvertTo-Json -Depth 50 | Set-Content -LiteralPath (Join-Path $runRoot 'summary.json') -Encoding utf8
 }
-
