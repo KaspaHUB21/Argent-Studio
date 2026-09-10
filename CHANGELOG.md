@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Group the top navigation by task with keyboard-accessible menus and direct save/build actions.
+
 - Replace application, installer and repository branding with the Kaspa Argent logo.
 
 - Build and test Windows installers automatically with GitHub Actions.

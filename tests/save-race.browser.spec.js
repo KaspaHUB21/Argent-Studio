@@ -38,7 +38,7 @@ test('overlapping saves execute in order without a false external conflict',asyn
 });
 test('close waits for a pending save and keeps newer edits open',async({page})=>{
  await delayWrites(page);await page.evaluate(()=>{edit('edit A');save();});await expect.poll(()=>page.evaluate(()=>pendingWrites.length)).toBe(1);
- await page.locator('#close').click();await expect(page.locator('.document-tab')).toHaveCount(1);
+ await page.locator('#menu-file>summary').click();await page.locator('#close').click();await expect(page.locator('.document-tab')).toHaveCount(1);
  await page.evaluate(()=>edit('edit B'));await release(page);
  await expect(page.getByRole('button',{name:'Speichern',exact:true})).toBeVisible();await page.getByRole('button',{name:'Speichern',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>pendingWrites.length)).toBe(1);await page.evaluate(()=>edit('edit C'));await release(page);

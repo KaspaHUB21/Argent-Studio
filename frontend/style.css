@@ -30,3 +30,36 @@ body.resizing-rows,body.resizing-rows *{cursor:row-resize!important;user-select:
 .brand-identity{display:flex;align-items:center;gap:8px;flex:0 0 auto;margin-right:12px;white-space:nowrap}.brand-identity .brand{margin-right:0;flex-basis:44px;width:44px;height:36px}.brand-text{display:flex;flex-direction:column;gap:2px;line-height:1.15}.brand-name{font-size:13px;font-weight:600;color:var(--text)}.brand-credit{font-size:11px;color:var(--muted)}.brand-credit-name{font-weight:700}.brand-kas{color:#70c7ba}.brand-btc{color:#f7931a}
 
 .document-tab{flex:0 1 190px;width:auto;min-width:110px;max-width:190px}
+
+/* Task-based desktop navigation. */
+.main-toolbar{padding:8px 12px;gap:16px;min-height:60px;position:relative;z-index:110}
+.main-toolbar .brand-identity{margin-right:4px}
+.app-navigation,.primary-actions{display:flex;align-items:center;gap:4px}
+.primary-actions{margin-left:auto;gap:6px}
+.main-toolbar .primary-actions button{min-height:32px;padding:6px 10px;border-radius:5px}
+.main-toolbar #compile{background:#207f77;color:#fff;border-color:#207f77;font-weight:600}
+.main-toolbar #compile:hover:enabled{background:#16675f}
+.main-toolbar #save{border-color:var(--border);background:var(--surface)}
+.main-toolbar #cancel:disabled{display:none}
+.app-menu{position:relative}
+.app-menu>summary{list-style:none;padding:7px 10px;border-radius:5px;cursor:pointer;white-space:nowrap}
+.app-menu>summary::-webkit-details-marker{display:none}
+.app-menu>summary:after{content:'⌄';font-size:12px;margin-left:7px;color:var(--muted)}
+.app-menu[open]>summary,.app-menu>summary:hover{background:color-mix(in srgb,var(--accent) 12%,var(--panel))}
+.app-menu-content{position:absolute;top:calc(100% + 7px);left:0;min-width:240px;max-width:min(360px,calc(100vw - 24px));max-height:calc(100vh - 100px);overflow-y:auto;padding:6px;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 28px #0003;display:flex;flex-direction:column;gap:2px}
+.app-menu:not([open])>.app-menu-content{display:none}
+.main-toolbar .app-menu-content button,.main-toolbar .app-menu-content .examples-menu>summary{display:block;width:100%;min-height:34px;padding:8px 10px;text-align:left;border-radius:4px;white-space:normal}
+.app-menu-content hr{border:0;border-top:1px solid var(--line);width:100%;margin:5px 0}
+.main-toolbar .app-menu-content .examples-menu{z-index:auto}
+.main-toolbar .app-menu-content .examples-menu>.popup-menu{position:static;min-width:0;max-width:100%;border:0;border-left:2px solid var(--line);box-shadow:none;padding:2px 0 2px 6px;margin-left:8px;background:transparent}
+.main-toolbar .build-options{display:flex;flex-direction:column;align-items:stretch;gap:7px;padding:0;border:0;background:transparent;white-space:normal}
+.build-options .app-label{margin:2px 10px;color:var(--muted);font-size:12px}
+.build-options #app-name{width:calc(100% - 20px);margin:0 10px 6px;height:30px}
+.viewbar{min-height:44px;padding:5px 12px;gap:5px;flex-wrap:wrap}
+.viewbar>button{min-width:0;min-height:30px;border-radius:5px;padding:5px 12px}
+.viewbar #view-text,.viewbar #view-structure{min-width:74px}
+.viewbar #focus{margin-left:10px;color:var(--muted)}
+.build-context{display:flex;align-items:center;gap:7px;margin-left:auto;min-width:0;color:var(--muted);font-size:12px}
+.build-context .entry-label{margin:0;max-width:280px;color:var(--text);font-family:Consolas,monospace}
+@media(max-width:1100px){.main-toolbar{gap:8px}.app-menu>summary{padding:7px}.main-toolbar .primary-actions button{padding:6px 8px}}
+@media(max-width:850px){.main-toolbar .primary-actions{margin-left:0}.build-context{max-width:100%}}

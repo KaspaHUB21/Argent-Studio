@@ -22,7 +22,7 @@ test.beforeEach(async({page})=>{
  });
  await page.goto(baseUrl);await expect(page.getByRole('dialog',{name:'New version available'})).toBeVisible();await page.getByRole('button',{name:'Later',exact:true}).click();
  await page.evaluate(()=>window.__ARGENT_APP__.context.updateDocument(window.__ARGENT_APP__.state.current.path,'app Edited { actor Ticket; }'));
- await page.locator('#check-updates').click();await page.getByRole('button',{name:'Update now'}).click();
+ await page.locator('#menu-help>summary').click();await page.locator('#check-updates').click();await page.getByRole('button',{name:'Update now'}).click();
  await expect.poll(()=>page.evaluate(()=>updateCalls)).toEqual(['save']);
 });
 test('full application saves edits and locks documents throughout download',async({page})=>{
