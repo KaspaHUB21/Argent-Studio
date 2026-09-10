@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Replace application, installer and repository branding with the Kaspa Argent logo.
+
 - Build and test Windows installers automatically with GitHub Actions.
 - Allow reversible file removal when Windows projects and the application data folder are on different drives.
 

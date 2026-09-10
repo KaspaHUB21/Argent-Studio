@@ -1,5 +1,7 @@
 # Argent Studio
 
+<img src="resources/assets/kaspa-argent-logo.png" alt="Kaspa Argent" width="320">
+
 A Tauri desktop editor for Argent contracts, with a source editor, interactive structure view, compiler output, and local test transactions.
 
 ## Windows download

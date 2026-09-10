@@ -1,6 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Argent Studio">
-  <rect x="8" y="8" width="240" height="240" rx="52" fill="#182633"/>
-  <path d="M122 63H147L200 193H166Z" fill="#58D9BD"/>
-  <path d="M56 193L109 63H139L89 193Z" fill="#EDF5FA"/>
-  <path d="M98 141H158L168 166H88Z" fill="#B8D3DF"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="198 181 800 800" width="800" height="800" role="img" aria-label="Kaspa Argent">
+  <defs>
+    <linearGradient id="turquoise" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#2ad9d0"/><stop offset="1" stop-color="#21cfc5"/>
+    </linearGradient>
+    <linearGradient id="silver" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#eceef0"/><stop offset="1" stop-color="#aeb3bc"/>
+    </linearGradient>
+  </defs>
+  <g fill="url(#turquoise)">
+    <path d="M290 379H397L521 515V378H607V703Z"/>
+    <path d="M245 784L441 561L512 633L383 784Z"/>
+    <path d="M520 641L608 731V784H520Z"/>
+  </g>
+  <g fill="url(#silver)">
+    <path d="M644 468L723 378L949 784H824Z"/>
+    <path d="M623 657L686 577L730 657Z"/>
+  </g>
 </svg>
