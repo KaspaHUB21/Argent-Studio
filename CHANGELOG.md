@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Build and test Windows installers automatically with GitHub Actions.
+- Allow reversible file removal when Windows projects and the application data folder are on different drives.
+
 ## 0.45.2
 
 - Check for new versions automatically when the application starts.

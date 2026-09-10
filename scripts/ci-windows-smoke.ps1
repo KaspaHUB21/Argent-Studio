@@ -33,10 +33,23 @@ function Invoke-BoundedProcess {
 function Invoke-Smoke {
     param([string]$Executable, [string]$Mode, [string]$ReportOption, [string]$ReportName)
     $reportPath = Join-Path $runRoot $ReportName
-    Invoke-BoundedProcess -FilePath $Executable -Arguments "$Mode $ReportOption `"$reportPath`""
+    try {
+        Invoke-BoundedProcess -FilePath $Executable -Arguments "$Mode $ReportOption `"$reportPath`""
+    } catch {
+        $failure = $_.Exception.Message
+        if (Test-Path -LiteralPath $reportPath -PathType Leaf) {
+            $details = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+            if ($details.PSObject.Properties['error']) { $failure += ": $($details.error)" }
+        }
+        throw $failure
+    }
     if (!(Test-Path -LiteralPath $reportPath -PathType Leaf)) { throw "Smoke report was not created: $ReportName" }
     $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
-    if ($report.success -ne $true) { throw "Smoke report failed: $ReportName" }
+    if ($report.success -ne $true) {
+        $failure = "Smoke report failed: $ReportName"
+        if ($report.PSObject.Properties['error']) { $failure += ": $($report.error)" }
+        throw $failure
+    }
     return $report
 }
 

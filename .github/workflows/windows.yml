@@ -48,7 +48,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Rust installation failed' }
 
       - name: Cache dependencies and native builds
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             .pnpm-store
@@ -84,6 +85,7 @@ jobs:
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml --release --features custom-protocol
 
       - name: Build Windows installer
+        id: installer
         run: pnpm tauri build --bundles nsis --config .github/tauri.ci.json
 
       - name: Test installed application
@@ -125,3 +127,17 @@ jobs:
             qa/*.png
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Save completed native builds
+        if: always() && steps.installer.outcome == 'success' && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .pnpm-store
+            .cargo/registry
+            .cargo/git
+            .runtime-target
+            src-tauri/target/release/build
+            src-tauri/target/release/deps
+            src-tauri/target/release/.fingerprint
+          key: ${{ steps.cache.outputs.cache-primary-key }}

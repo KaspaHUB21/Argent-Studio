@@ -3,6 +3,7 @@
 mod update_verification;
 use std::{collections::HashMap, path::{Path, PathBuf}, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}}, time::{Duration, SystemTime, UNIX_EPOCH}};
 mod ai_files;
+mod file_move;
 use ai_files::read_ai_file;
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -259,7 +260,7 @@ fn local_revision(root:&Path,name:&str)->String {
 #[tauri::command] fn create_file(path:String,text:Option<String>)->Result<(),String>{use std::io::Write;let path=Path::new(&path);write_allowed(path)?;let mut file=std::fs::OpenOptions::new().write(true).create_new(true).open(path).map_err(err)?;file.write_all(text.unwrap_or_default().as_bytes()).map_err(err)}
 #[tauri::command] fn trash_file(app:tauri::AppHandle,path:String,project_root:String)->Result<String,String>{
     let path=Path::new(&path).canonicalize().map_err(err)?;let root=Path::new(&project_root).canonicalize().map_err(err)?;write_allowed(&path)?;if !path.starts_with(&root)||path==root||!path.is_file(){return Err("Select a file within this project".into());}
-    let trash=data(&app)?.join("trash");std::fs::create_dir_all(&trash).map_err(err)?;let target=trash.join(format!("{}-{}",SystemTime::now().duration_since(UNIX_EPOCH).map_err(err)?.as_nanos(),path.file_name().unwrap_or_default().to_string_lossy()));std::fs::rename(&path,&target).map_err(err)?;Ok(target.to_string_lossy().into_owned())
+    let trash=data(&app)?.join("trash");std::fs::create_dir_all(&trash).map_err(err)?;let target=trash.join(format!("{}-{}",SystemTime::now().duration_since(UNIX_EPOCH).map_err(err)?.as_nanos(),path.file_name().unwrap_or_default().to_string_lossy()));file_move::move_to_trash(&path,&target).map_err(err)?;Ok(target.to_string_lossy().into_owned())
 }
 #[tauri::command] fn clone_example(app:tauri::AppHandle,id:String)->Result<Value,String>{
     let(_,entry,app_name)=EXAMPLES.into_iter().find(|(key,_,_)|*key==id).ok_or("Unknown example")?;
@@ -282,7 +283,7 @@ async fn native_smoke(app:tauri::AppHandle)->Result<Value,String>{
     let result=build(app.clone(),entry.clone(),root.clone(),Some("Tickets".into()),None).await?;if !result.success{return Err(format!("Build failed: {} {}",result.stdout,result.stderr));}
     let inspection=inspect(app.clone(),result.output.clone(),None).await?;if !inspection.success{return Err(format!("Inspect failed: {}",inspection.stderr));}
     let runtime=run_scenario(app.clone(),format!("{}/artifact.json",result.output),json!({})).await?;
-    let new_path=Path::new(&root).join("smoke-create.ag").to_string_lossy().into_owned();create_file(new_path.clone(),Some("// native smoke".into()))?;if create_file(new_path.clone(),None).is_ok(){return Err("Exclusive create overwrote existing file".into());}let trash=trash_file(app.clone(),new_path.clone(),root.clone())?;if Path::new(&new_path).exists()||!Path::new(&trash).exists(){return Err("Reversible file removal failed".into());}
+    let new_path=Path::new(&root).join("smoke-create.ag").to_string_lossy().into_owned();create_file(new_path.clone(),Some("// native smoke".into()))?;if create_file(new_path.clone(),None).is_ok(){return Err("Exclusive create overwrote existing file".into());}let trash=trash_file(app.clone(),new_path.clone(),root.clone())?;if Path::new(&new_path).exists()||!Path::new(&trash).exists(){return Err("Reversible file removal failed".into());}if std::fs::read(&trash).map_err(err)?!=b"// native smoke"{return Err("Trashed file contents changed".into());}
     Ok(json!({"success":true,"app":info,"project":root,"build":result,"inspectExitCode":inspection.exit_code,"structurePresent":model.is_object(),"runtimeInvalidScenarioResult":runtime,"exclusiveCreate":true,"reversibleRemoval":true}))
 }
 
