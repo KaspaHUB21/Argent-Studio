@@ -30,6 +30,26 @@ function Invoke-BoundedProcess {
     } finally { $process.Dispose() }
 }
 
+function Assert-ApplicationIcon {
+    param([string]$Executable)
+    Add-Type -AssemblyName System.Drawing
+    $actualIcon = [System.Drawing.Icon]::ExtractAssociatedIcon($Executable)
+    $expectedIcon = [System.Drawing.Icon]::new((Join-Path $projectRoot 'src-tauri/icons/icon.ico'), $actualIcon.Size)
+    $actual = $actualIcon.ToBitmap()
+    $expected = $expectedIcon.ToBitmap()
+    try {
+        $matches = 0
+        for ($y = 0; $y -lt $actual.Height; $y++) {
+            for ($x = 0; $x -lt $actual.Width; $x++) {
+                $a = $actual.GetPixel($x, $y); $b = $expected.GetPixel($x, $y)
+                if (($a.A -eq 0 -and $b.A -eq 0) -or $a.ToArgb() -eq $b.ToArgb()) { $matches++ }
+            }
+        }
+        if ($matches / ($actual.Width * $actual.Height) -lt 0.95) { throw "Unexpected application icon: $([IO.Path]::GetFileName($Executable))" }
+        Write-Host "Application icon verified: $([IO.Path]::GetFileName($Executable))"
+    } finally { $actual.Dispose(); $expected.Dispose(); $actualIcon.Dispose(); $expectedIcon.Dispose() }
+}
+
 function Invoke-Smoke {
     param([string]$Executable, [string]$Mode, [string]$ReportOption, [string]$ReportName)
     $reportPath = Join-Path $runRoot $ReportName
@@ -76,6 +96,11 @@ try {
         (Join-Path $packageRoot 'resources/bin/runtime/node.exe'))
     foreach ($binary in $binaries) {
         if (!(Test-Path -LiteralPath $binary -PathType Leaf) -or (Get-Item -LiteralPath $binary).Length -eq 0) { throw "Required binary missing or empty: $binary" }
+    }
+    Assert-ApplicationIcon -Executable $application
+    if ($Installer) {
+        Assert-ApplicationIcon -Executable $installerPath
+        Assert-ApplicationIcon -Executable (Join-Path $packageRoot 'uninstall.exe')
     }
     & node (Join-Path $PSScriptRoot 'check-binary-paths.mjs') @binaries
     if ($LASTEXITCODE -ne 0) { throw 'Personal build path scan failed.' }
