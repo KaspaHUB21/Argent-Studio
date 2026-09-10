@@ -21,7 +21,7 @@ test('Stones graph remains clean through repeated pan and zoom with independent 
  await expect(svg).not.toHaveAttribute('viewBox',initial);
  await page.getByRole('button',{name:'Alles einpassen',exact:true}).click();await page.mouse.move(1,1);
  const fitted=(await svg.getAttribute('viewBox')).split(' ').map(Number),original=initial.split(' ').map(Number);expect(Math.abs(fitted[2]/original[2]-1)).toBeLessThan(.02);
- for(let i=0;i<4;i++)await page.getByRole('button',{name:'+',exact:true}).click();await page.getByRole('button',{name:'Zur Auswahl',exact:true}).click();await page.mouse.move(1,1);
+ for(let i=0;i<4;i++)await page.getByRole('button',{name:'Vergrößern',exact:true}).click();await page.getByRole('button',{name:'Auswahl zentrieren',exact:true}).click();await page.mouse.move(1,1);
  await graph.screenshot({path:'qa/structure-stones-pan-zoom.png'});
  // Move every primitive outside the viewport; no old edge pixels may remain.
  const b=await graph.boundingBox();await page.mouse.move(b.x+b.width/2,b.y+b.height/2);await page.mouse.down({button:'middle'});await page.mouse.move(b.x+9000,b.y+9000,{steps:16});await page.mouse.up({button:'middle'});await page.mouse.move(1,1);
