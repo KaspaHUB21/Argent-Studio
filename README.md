@@ -48,6 +48,10 @@ Development projects use the local `projects` directory. Portable Windows builds
 
 The four examples are seeded from `resources/examples/catalog` without overwriting existing projects. Reopening an example reuses its existing folder. Use **Duplicate project** to create a separately named copy. Generated files belong in each project's `build` directory and are available from **Generated files**. Keep recent builds and use the build cleanup action when needed.
 
+## Continuous integration
+
+[Windows build and tests](https://github.com/KaspaHUB21/Argent-Studio/actions/workflows/windows.yml) builds the installer and runs automated checks for every push to `main` and every pull request. See [docs/CI.md](docs/CI.md) for test artifacts and signing details.
+
 ## Tests
 
 ```sh
