@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.45.4
+
+- Move Project, Build / results and AI assistant controls into the second toolbar for direct access.
+- Remove the View dropdown menu.
+
 ## 0.45.3
 
 - Group the top navigation by task with keyboard-accessible menus and direct save/build actions.

@@ -109,7 +109,18 @@ for (const language of ['de', 'en']) test(`grouped toolbar navigation and layout
  const bar=await page.locator('.main-toolbar').boundingBox();expect(bar.height).toBeLessThan(75);
  await page.keyboard.press('Escape');
  await page.evaluate(()=>{window.__ARGENT_APP__.state.settings.darkMode=true;window.__ARGENT_APP__.applySettings();});
- await page.locator('#menu-view>summary').click();
+ await expect(page.locator('#menu-view')).toHaveCount(0);
+ for (const [id, pane] of [['panel-project','project-pane'],['panel-results','results-pane']]) {
+  const button=page.locator(`.viewbar .view-panels #${id}`);
+  await expect(button).toBeVisible();
+  const visible=await page.locator(`#${pane}`).isVisible();
+  await button.click();await expect(page.locator(`#${pane}`)).toBeVisible({visible:!visible});
+  await button.click();await expect(page.locator(`#${pane}`)).toBeVisible({visible});
+ }
+ const panels=await page.locator('.view-panels').boundingBox();
+ const views=await page.locator('.viewbar').boundingBox();
+ expect(panels.y+panels.height).toBeLessThanOrEqual(views.y+views.height);
+ expect(panels.x+panels.width).toBeLessThanOrEqual(1150);
  await expect(page.locator('#panel-assistant')).toBeDisabled();
  await page.screenshot({path:`qa/grouped-view-dark-${language}.png`});
 });

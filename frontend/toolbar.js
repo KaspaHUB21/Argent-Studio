@@ -41,13 +41,14 @@ export function organizeToolbar(toolbar, buildbar, views, language) {
   buildbar.classList.add('build-options');
   buildbar.querySelector('.separator')?.remove();
   const appLabel = buildbar.querySelector('.app-label'); appLabel.htmlFor = 'app-name';
-  menu('view', 'Ansicht', 'View', ['panel-project', 'panel-results', 'panel-assistant']);
+  const panels = document.createElement('div'); panels.className = 'view-panels';
+  panels.append(find('panel-project'), find('panel-results'), find('panel-assistant'));
   text(find('help'), 'Dokumentation', 'Documentation');
   menu('help', 'Hilfe', 'Help', ['help', 'check-updates']);
   const primary = document.createElement('div'); primary.className = 'primary-actions';
   primary.append(find('save'), find('compile'), find('cancel'), find('settings'));
   toolbar.append(nav, primary);
-  views.append(entryContext);
+  views.append(panels, entryContext);
   find('save').title = 'Ctrl/Cmd+S'; find('compile').title = 'F5';
   find('open-project').title = 'Ctrl/Cmd+O'; find('close').title = 'Ctrl/Cmd+W';
   document.addEventListener('pointerdown', event => {
