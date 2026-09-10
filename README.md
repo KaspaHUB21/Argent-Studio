@@ -26,7 +26,7 @@ pnpm tauri dev
 
 The runtime build compiles the vendored Argent compiler and local transaction runner, then copies the active Node executable into the runtime folder. Native helper binaries must be built on the target platform. Cargo and pnpm lockfiles pin dependencies; the first build requires network access to retrieve them.
 
-For a production application bundle:
+For a production application bundle, provide the updater signing key using the Tauri signing environment variables (see docs/RELEASE.md):
 
 ```sh
 pnpm tauri build
@@ -75,3 +75,7 @@ Documentation and file names are English. German strings in source files are int
 Original application code is MIT licensed. Vendored components retain their own licenses. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 Release verification and signing requirements are documented in [docs/RELEASE.md](docs/RELEASE.md).
+
+## Application updates
+
+Windows release builds check for updates at startup. Use **Updates** to check manually. Choose **Later** to dismiss a release, or **Update now** to save pending changes, download and verify the signed installer, and install the update. Version 0.45.1 and earlier require a one-time manual installation of an updater-enabled version. Update signatures are separate from Windows publisher signatures.

@@ -1,6 +1,6 @@
 {
   "name": "argent-studio-tauri",
-  "version": "0.45.1",
+  "version": "0.45.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -21,6 +21,7 @@
     "@lezer/highlight": "^1.0.0",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.0.0",
+    "@tauri-apps/plugin-updater": "^2.11.0",
     "codemirror": "^6.0.0",
     "lossless-json": "^4.3.1"
   },

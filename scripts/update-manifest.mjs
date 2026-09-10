@@ -1,0 +1,12 @@
+import fs from 'node:fs';
+import path from 'node:path';
+const version=JSON.parse(fs.readFileSync('package.json','utf8')).version;
+const bundle=path.resolve('src-tauri/target/release/bundle/nsis');
+const installer=path.join(bundle,'Argent Studio_'+version+'_x64-setup.exe');
+const signature=fs.readFileSync(installer+'.sig','utf8').trim();
+if(!fs.statSync(installer).size||!signature)throw Error('Signed update installer missing');
+const notes=fs.readFileSync('CHANGELOG.md','utf8').replace(/\r\n/g,'\n').split('## '+version+'\n')[1]?.split('\n## ')[0].trim();
+if(!notes)throw Error('Release changelog section missing');
+const manifest={version,notes,pub_date:new Date().toISOString(),platforms:{'windows-x86_64':{signature,url:'https://github.com/KaspaHUB21/Argent-Studio/releases/download/v'+version+'/Argent-Studio-'+version+'-windows-x64-setup.exe'}}};
+fs.writeFileSync(path.join(bundle,'latest.json'),JSON.stringify(manifest,null,2)+'\n');
+console.log('Created update manifest for '+version);

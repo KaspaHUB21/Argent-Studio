@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.45.2
+
+- Check for new versions automatically when the application starts.
+- Review release notes and install updates directly from the application.
+- Save pending edits before updating and display download progress.
+- Verify update signatures before installation.
+
 ## 0.45.1
 
 - Serialize saves and preserve the exact written snapshot so edits during a pending save remain unsaved.

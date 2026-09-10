@@ -1,0 +1,13 @@
+{
+  "identifier": "windows-updater",
+  "description": "Signed Windows application updates",
+  "windows": [
+    "main"
+  ],
+  "platforms": [
+    "windows"
+  ],
+  "permissions": [
+    "updater:default"
+  ]
+}
