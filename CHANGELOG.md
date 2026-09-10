@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.45.3
 
 - Group the top navigation by task with keyboard-accessible menus and direct save/build actions.
 
