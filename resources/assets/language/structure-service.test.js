@@ -18,7 +18,7 @@ test('record writes are distinct from field reads in every projected alias', () 
 });
 function model(text, documents = []) { return structure({ path: path.resolve('test-output/structure/main.ag'), text, documents }); }
 test('tickets have exact editable source ranges and the intended relationships', () => {
-  const text = fs.readFileSync(path.resolve(__dirname, '../../examples/tickets/main.ag'), 'utf8');
+  const text = fs.readFileSync(path.resolve(__dirname, '../../examples/catalog/tickets/tickets.ag'), 'utf8');
   const result = model(text);
   const view = result.presentation;
   const issuerView = view.nodes.find(n => n.kind === 'actor' && n.name === 'Issuer');
@@ -69,7 +69,7 @@ test('unfinished actor body remains represented for editing', () => {
   assert.ok(result.nodes.every(n => n.end >= n.start));
 });
 test('semantic tree order and identities survive moving all top-level declarations', () => {
-  const text = fs.readFileSync(path.resolve(__dirname, '../../examples/tickets/main.ag'), 'utf8');
+  const text = fs.readFileSync(path.resolve(__dirname, '../../examples/catalog/tickets/tickets.ag'), 'utf8');
   const first = model(text);
   const declarations = first.nodes.filter(n => ['app', 'actor', 'state'].includes(n.kind));
   const second = model(declarations.reverse().map(n => n.text).join('\n\n'));

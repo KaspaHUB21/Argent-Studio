@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use std::{collections::HashMap, path::{Path, PathBuf}, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}}, time::{Duration, SystemTime, UNIX_EPOCH}};
+mod ai_files;
+use ai_files::read_ai_file;
 use serde::Serialize;
 use serde_json::{json, Value};
 use tauri::{Emitter, Manager};
@@ -10,8 +12,8 @@ struct Operations { cancel: Mutex<Option<Arc<AtomicBool>>>, api: Mutex<HashMap<S
 fn err(e: impl std::fmt::Display)->String {e.to_string()}
 fn resources(app:&tauri::AppHandle)->PathBuf {
     let packaged=normal_path(app.path().resource_dir().unwrap_or_default().join("resources")); if packaged.join("bin").is_dir(){return packaged;}
-    let local=PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources");
-    if local.is_dir() {return local;}
+    #[cfg(debug_assertions)]
+    { let local=PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources"); if local.is_dir() {return local;} }
     app.path().resource_dir().unwrap_or_default().join("resources")
 }
 fn data(app:&tauri::AppHandle)->Result<PathBuf,String> {let p=app.path().app_data_dir().map_err(err)?; std::fs::create_dir_all(&p).map_err(err)?; Ok(p)}
@@ -25,9 +27,11 @@ fn portable_projects_root(exe:&Path)->Result<PathBuf,String>{
 fn projects(app:&tauri::AppHandle)->Result<PathBuf,String>{
     let root=if let Some(custom)=std::env::var_os("ARGENT_PROJECTS_DIR").filter(|v|!v.is_empty()){
         let path=PathBuf::from(custom);if !path.is_absolute(){return Err("Projects folder must be an absolute path".into());}path
-    }else if cfg!(debug_assertions){PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../projects")}
-    else if cfg!(target_os="macos"){app.path().document_dir().map_err(err)?.join("Argent Studio/projects")}
-    else{portable_projects_root(&std::env::current_exe().map_err(err)?)?};
+    }else{
+        #[cfg(debug_assertions)] { PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../projects") }
+        #[cfg(all(not(debug_assertions),target_os="macos"))] { app.path().document_dir().map_err(err)?.join("Argent Studio/projects") }
+        #[cfg(all(not(debug_assertions),not(target_os="macos")))] { portable_projects_root(&std::env::current_exe().map_err(err)?)? }
+    };
     write_allowed(&root)?;seed_examples(&resources(app).join("examples/catalog"),&root)?;Ok(normal_path(root))
 }
 fn copy_example(source:&Path,target:&Path)->Result<(),String>{
@@ -173,7 +177,7 @@ async fn process(app:&tauri::AppHandle,exe:PathBuf,args:Vec<String>,cwd:Option<P
     #[cfg(target_os="linux")] {std::process::Command::new("xdg-open").arg(&url).spawn().map_err(err)?;}
     Ok(())
 }
-fn main(){tauri::Builder::default().manage(Operations::default()).plugin(tauri_plugin_dialog::init()).on_page_load(|webview,payload| { if std::env::args().any(|a|a=="--ui-smoke") && matches!(payload.event(),tauri::webview::PageLoadEvent::Finished) { let _=webview.eval(UI_SMOKE_SCRIPT); } }).setup(|app| { if std::env::args().any(|a|a=="--ui-smoke") { let handle=app.handle().clone(); tauri::async_runtime::spawn(async move {tokio::time::sleep(Duration::from_secs(60)).await;let _=record_ui_smoke(handle,json!({"success":false,"error":"Native UI smoke exceeded 60 seconds; page/IPC initialization did not finish"}));}); } if std::env::args().any(|a|a=="--smoke-test") { if let Some(window)=app.get_webview_window("main"){let _=window.hide();} let handle=app.handle().clone(); tauri::async_runtime::spawn(async move {let result=native_smoke(handle.clone()).await;let ok=result.is_ok();let report=match result{Ok(v)=>v,Err(e)=>json!({"success":false,"error":e})};let args:Vec<String>=std::env::args().collect();let target=args.iter().position(|a|a=="--smoke-report").and_then(|i|args.get(i+1)).map(PathBuf::from).unwrap_or_else(||PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../test-output/native-smoke.json"));if write_allowed(&target).is_ok(){if let Some(parent)=target.parent(){let _=std::fs::create_dir_all(parent);}let _=std::fs::write(target,serde_json::to_vec_pretty(&report).unwrap_or_default());}handle.exit(if ok{0}else{1});}); } Ok(()) }).invoke_handler(tauri::generate_handler![app_info,list_directory,read_file,write_file,create_directory,load_settings,save_settings,set_secret,build,inspect,cancel_operation,language_request,run_scenario,run_scenario_json,api_request,cancel_api,list_examples,open_example,duplicate_project,cleanup_builds,clone_example,trash_file,create_file,read_reference,toolchain_status,toolchain_verify,toolchain_updates,open_external,record_ui_smoke]).run(tauri::generate_context!()).expect("Unable to start Argent Studio");}
+fn main(){tauri::Builder::default().manage(Operations::default()).plugin(tauri_plugin_dialog::init()).on_page_load(|webview,payload| { if std::env::args().any(|a|a=="--ui-smoke") && matches!(payload.event(),tauri::webview::PageLoadEvent::Finished) { let _=webview.eval(UI_SMOKE_SCRIPT); } }).setup(|app| { if std::env::args().any(|a|a=="--ui-smoke") { let handle=app.handle().clone(); tauri::async_runtime::spawn(async move {tokio::time::sleep(Duration::from_secs(60)).await;let _=record_ui_smoke(handle,json!({"success":false,"error":"Native UI smoke exceeded 60 seconds; page/IPC initialization did not finish"}));}); } if std::env::args().any(|a|a=="--smoke-test") { if let Some(window)=app.get_webview_window("main"){let _=window.hide();} let handle=app.handle().clone(); tauri::async_runtime::spawn(async move {let result=native_smoke(handle.clone()).await;let ok=result.is_ok();let report=match result{Ok(v)=>v,Err(e)=>json!({"success":false,"error":e})};let args:Vec<String>=std::env::args().collect();let target=args.iter().position(|a|a=="--smoke-report").and_then(|i|args.get(i+1)).map(PathBuf::from).unwrap_or_else(||std::env::temp_dir().join("argent-studio/native-smoke.json"));if write_allowed(&target).is_ok(){if let Some(parent)=target.parent(){let _=std::fs::create_dir_all(parent);}let _=std::fs::write(target,serde_json::to_vec_pretty(&report).unwrap_or_default());}handle.exit(if ok{0}else{1});}); } Ok(()) }).invoke_handler(tauri::generate_handler![app_info,list_directory,read_file,read_ai_file,write_file,create_directory,load_settings,save_settings,set_secret,build,inspect,cancel_operation,language_request,run_scenario,run_scenario_json,api_request,cancel_api,list_examples,open_example,duplicate_project,cleanup_builds,clone_example,trash_file,create_file,read_reference,toolchain_status,toolchain_verify,toolchain_updates,open_external,record_ui_smoke]).run(tauri::generate_context!()).expect("Unable to start Argent Studio");}
 
 
 #[cfg(test)]
@@ -294,7 +298,7 @@ fn normal_path(path:PathBuf)->PathBuf {
 
 #[tauri::command] fn record_ui_smoke(app:tauri::AppHandle,report:Value)->Result<(),String>{
     if !std::env::args().any(|a|a=="--ui-smoke"){return Err("UI smoke reporting disabled in normal application mode".into());}
-    let args:Vec<String>=std::env::args().collect();let target=args.iter().position(|a|a=="--ui-smoke-report").and_then(|i|args.get(i+1)).map(PathBuf::from).unwrap_or_else(||PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../test-output/native-ui-smoke.json"));
+    let args:Vec<String>=std::env::args().collect();let target=args.iter().position(|a|a=="--ui-smoke-report").and_then(|i|args.get(i+1)).map(PathBuf::from).unwrap_or_else(||std::env::temp_dir().join("argent-studio/native-ui-smoke.json"));
     write_allowed(&target)?;if let Some(parent)=target.parent(){std::fs::create_dir_all(parent).map_err(err)?;}atomic_write(&target,&serde_json::to_vec_pretty(&report).map_err(err)?)?;app.exit(if report["success"]==true{0}else{1});Ok(())
 }
 const UI_SMOKE_SCRIPT:&str=r#"

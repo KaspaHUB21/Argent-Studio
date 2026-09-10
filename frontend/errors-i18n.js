@@ -1,6 +1,14 @@
 // Translate only application-owned messages. Compiler, OS and service diagnostics
 // must retain their original details (including paths and source excerpts).
 const messages = {
+ 'Linked project paths are unsupported for AI access':'Die KI darf nicht auf verknüpfte Projektpfade zugreifen.',
+ 'Project-relative file path required':'Ein Dateipfad innerhalb des Projekts ist erforderlich.',
+ 'Absolute project root required':'Der Projektordner muss als absoluter Pfad angegeben werden.',
+ 'Unnormalized project root':'Der Projektpfad enthält unzulässige relative Bestandteile.',
+ 'AI access requires a regular file':'Die KI darf nur auf reguläre Dateien zugreifen.',
+ 'AI access requires a directory':'Für den KI-Zugriff wird ein regulärer Ordner benötigt.',
+ 'AI access requires a source or build file':'Die KI darf nur auf Quell- oder Build-Dateien zugreifen.',
+ 'File exceeds AI context limit':'Die Datei überschreitet das KI-Kontextlimit.',
  'Choose a valid project name without path separators':'Bitte einen gültigen Projektnamen ohne Pfadtrennzeichen wählen.',
  'Project folder missing':'Der Projektordner fehlt.',
  'Cannot duplicate a project inside itself':'Ein Projekt kann nicht in sich selbst dupliziert werden.',

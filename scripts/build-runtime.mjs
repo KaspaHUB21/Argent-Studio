@@ -1,3 +1,4 @@
+import './configure-build.mjs';
 // Build native helpers for the current OS from this application's copied sources.
 // Requires Rust >= 1.94, platform C/C++ build tools and Node >= 22.
 import { spawnSync } from 'node:child_process';

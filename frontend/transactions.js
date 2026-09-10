@@ -1,9 +1,27 @@
-import {parse as parseLossless,stringify as stringifyLossless,LosslessNumber,isLosslessNumber} from 'lossless-json';
+import {parse as parseLossless,stringify as stringifyLossless,LosslessNumber,isLosslessNumber,isSafeNumber} from 'lossless-json';
 const MIN_I64=-(1n<<63n),MAX_I64=(1n<<63n)-1n;
-export function parseScenario(text){return parseLossless(text,null,value=>/^-?\d+$/.test(value)&&!Number.isSafeInteger(Number(value))?new LosslessNumber(value):Number(value));}
+// Normalize integer-valued decimal/exponent tokens before any Number conversion.
+// Bound expansion to Int64-sized values so extreme exponents cannot allocate huge strings.
+function scenarioNumber(token){
+ const [,sign,whole,fraction='',exponent='0']=/^(-?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(token);
+ let digits=(whole+fraction).replace(/^0+/,'');
+ if(!digits)return 0;
+ const trailing=digits.length-digits.replace(/0+$/,'').length;
+ digits=digits.slice(0,digits.length-trailing);
+ const shift=BigInt(exponent)-BigInt(fraction.length)+BigInt(trailing);
+ if(shift>=0n&&BigInt(digits.length)+shift<=19n){
+  const literal=sign+digits+'0'.repeat(Number(shift));
+  return Number.isSafeInteger(Number(literal))?Number(literal):new LosslessNumber(literal);
+ }
+ // Keep all other unsafe values as their original JSON token (including fractions,
+ // overflow and underflow); typed integer validation rejects unsupported values.
+ const value=Number(token);
+ return isSafeNumber(token)&&(!Number.isInteger(value)||Number.isSafeInteger(value))?value:new LosslessNumber(token);
+}
+export function parseScenario(text){return parseLossless(text,null,scenarioNumber);}
 export function stringifyScenario(value,space){return stringifyLossless(value,null,space);}
 const cloneScenario=value=>parseScenario(stringifyScenario(value));
-const integer=value=>isLosslessNumber(value)?BigInt(value.value):Number.isSafeInteger(value)?BigInt(value):null;
+const integer=value=>isLosslessNumber(value)?(/^-?\d+$/.test(value.value)?BigInt(value.value):null):Number.isSafeInteger(value)?BigInt(value):null;
 const numeric=value=>value>=BigInt(Number.MIN_SAFE_INTEGER)&&value<=BigInt(Number.MAX_SAFE_INTEGER)?Number(value):new LosslessNumber(value.toString());
 import {installLanguage} from './structure-i18n.js';
 import {element} from './structure.js';

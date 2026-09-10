@@ -2,6 +2,10 @@
 
 A Tauri desktop editor for Argent contracts, with a source editor, interactive structure view, compiler output, and local test transactions.
 
+## Windows download
+
+Download the Windows x64 installer from [GitHub Releases](https://github.com/KaspaHUB21/Argent-Studio/releases/latest). No separate JSON files or development tools are needed. Windows installers are currently unsigned; trusted publisher signing is pending certificate provisioning.
+
 ## Features
 
 - Projects, editable examples, named project duplication, and conflict-aware saving.
@@ -48,6 +52,7 @@ The four examples are seeded from `resources/examples/catalog` without overwriti
 
 ```sh
 pnpm test
+pnpm run test:services
 cargo test --locked --manifest-path src-tauri/Cargo.toml
 pnpm exec playwright test --workers=1
 ```
@@ -68,3 +73,5 @@ Documentation and file names are English. German strings in source files are int
 ## License
 
 Original application code is MIT licensed. Vendored components retain their own licenses. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+Release verification and signing requirements are documented in [docs/RELEASE.md](docs/RELEASE.md).

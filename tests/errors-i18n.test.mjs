@@ -9,3 +9,11 @@ test('application errors follow selected language and support Error objects',()=
 test('raw diagnostics and paths remain verbatim in either language',()=>{
  for(const language of ['de','en'])for(const message of ['OpenAI HTTP 400: invalid argument','C:\\projects\\Unknown example.ag:12: parser error','os error 2: cannot find file','Build failed: Unknown example'])assert.equal(localizeError(message,language),message);
 });
+
+test('AI scoped-read privacy errors translate in both languages',()=>{
+ const english='Linked project paths are unsupported for AI access';
+ const german='Die KI darf nicht auf verknüpfte Projektpfade zugreifen.';
+ assert.equal(localizeError(english,'de'),german);
+ assert.equal(localizeError(german,'en'),english);
+ assert.equal(localizeError('AI access requires a source or build file','de'),'Die KI darf nur auf Quell- oder Build-Dateien zugreifen.');
+});
