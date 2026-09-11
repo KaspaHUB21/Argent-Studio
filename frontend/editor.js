@@ -3,14 +3,13 @@ import {EditorView,keymap,hoverTooltip} from '@codemirror/view';
 import {basicSetup} from 'codemirror';
 import {liveEditorExtensions,liveRefreshEffect} from './live-editor.js';
 import {indentWithTab,undo,redo,toggleComment,copyLineDown,isolateHistory} from '@codemirror/commands';
-import {StreamLanguage,syntaxHighlighting,HighlightStyle,foldService,indentUnit} from '@codemirror/language';
+import {syntaxHighlighting,HighlightStyle,foldService,indentUnit} from '@codemirror/language';
 import {tags} from '@lezer/highlight';
 import {autocompletion,acceptCompletion,completionStatus,startCompletion} from '@codemirror/autocomplete';
 export const normalizeEditorText=text=>text==null?text:String(text).replace(/\r\n?/g,'\n');
 export const germanEditorPhrases={"Completions":"Vervollständigungen","Find":"Suchen","Replace":"Ersetzen","next":"weiter","previous":"zurück","all":"alle","match case":"Groß-/Kleinschreibung","regexp":"Regulärer Ausdruck","by word":"Ganzes Wort","replace":"ersetzen","replace all":"alle ersetzen","close":"schließen","Go to line":"Gehe zu Zeile","go":"Los","current match":"Aktueller Treffer","on line":"in Zeile","replaced match on line $":"Treffer in Zeile $ ersetzt","replaced $ matches":"$ Treffer ersetzt","Fold line":"Zeile einklappen","Unfold line":"Zeile ausklappen","folded code":"Eingeklappter Code","unfold":"ausklappen","Folded lines":"Eingeklappte Zeilen","Unfolded lines":"Ausgeklappte Zeilen","to":"bis","Control character":"Steuerzeichen"};
-const keywords=new Set('app actor state entry fn let const if else require become spawn emits owns import from as return delegate abstract extends enum struct match true false self'.split(' '));
-const types=new Set('int bool byte bytes pubkey sig string void hash'.split(' '));
-export const argent=StreamLanguage.define({startState:()=>({comment:false}),token(stream,state){if(state.comment){if(stream.skipTo('*/')){stream.match('*/');state.comment=false;}else stream.skipToEnd();return 'comment';}if(stream.eatSpace())return null;if(stream.match('//')){stream.skipToEnd();return 'comment';}if(stream.match('/*')){state.comment=true;return 'comment';}if(stream.match(/"(?:[^"\\]|\\.)*"/))return 'string';if(stream.match(/(?:0x[\da-fA-F]+|\d+)/))return 'number';if(stream.match(/[a-zA-Z_]\w*/)){const w=stream.current();return keywords.has(w)?'keyword':types.has(w)?'typeName':null;}stream.next();return null;},languageData:{commentTokens:{line:'//'},closeBrackets:{brackets:['(','[','{','"']}}});
+import {argent} from './argent-language.js';
+export {argent};
 export function createEditor(host,options={}){
  const config=new Compartment(),readOnly=new Compartment();let ignore=false;
  const live=Boolean(options.language)&&options.live!==false;

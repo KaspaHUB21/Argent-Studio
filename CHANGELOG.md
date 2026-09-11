@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.45.9
+
+- Indent new lines inside blocks, calls and arrays automatically.
+- Align closing brackets with their opening level.
+- Preserve correct indentation around comments, strings and nested state initializers.
+
 ## 0.45.8
 
 - Add local inline completion, parameter hints, matching-name highlights and sticky block context.

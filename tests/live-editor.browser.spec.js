@@ -174,3 +174,36 @@ test('record key completion chooses redeemed and accepts it without changing the
  await page.keyboard.press('Tab');expect(await documentText(page)).toBe(text.replace('\n red\n','\n redeemed\n'));
  await page.keyboard.type(': 1,');expect(await documentText(page)).toContain('redeemed: 1,');
 });
+
+test('Enter indents nested blocks and aligns their closing braces',async({page})=>{
+ await mount(page,{text:'actor Sample {'});await select(page,'actor Sample {'.length);
+ await page.keyboard.press('Enter');
+ expect(await documentText(page)).toBe('actor Sample {\n    ');
+ await page.keyboard.type('entry change() {');await page.keyboard.press('Enter');
+ expect(await documentText(page)).toBe('actor Sample {\n    entry change() {\n        \n    }');
+ await page.keyboard.type('require(true);');await page.keyboard.press('ArrowDown');await page.keyboard.press('End');await page.keyboard.press('Enter');await page.keyboard.type('}');
+ expect(await documentText(page)).toBe('actor Sample {\n    entry change() {\n        require(true);\n    }\n}');
+});
+
+test('closing delimiters dedent while comment and string braces do not affect Enter',async({page})=>{
+ const prefix='actor Sample {\n    entry change() {\n        ';
+ await mount(page,{text:prefix});await select(page,prefix.length);await page.keyboard.type('}');
+ expect(await documentText(page)).toBe('actor Sample {\n    entry change() {\n    }');
+ for(const line of ['// { [ (','/* { [ ( */','require("{ [ (");']){
+  await replace(page,prefix+line);await page.keyboard.press('Enter');
+  expect(await documentText(page)).toBe(prefix+line+'\n        ');
+ }
+ for(const [open,close] of [['(',')'],['[',']']]){
+  await replace(page,prefix+'call'+open);await page.keyboard.press('Enter');
+  expect(await documentText(page)).toBe(prefix+'call'+open+'\n            ');
+  await page.keyboard.type(close);expect(await documentText(page)).toBe(prefix+'call'+open+'\n        '+close);
+ }
+});
+
+test('indent selection handles nested records, multiline parameters and undo',async({page})=>{
+ const text='actor Sample {\nentry change(\nint amount,\nbool allowed\n) {\nState next = {\nvalue: amount,\nflags: [\ntrue,\nfalse\n]\n};\n}\n}';
+ const expected='actor Sample {\n    entry change(\n        int amount,\n        bool allowed\n    ) {\n        State next = {\n            value: amount,\n            flags: [\n                true,\n                false\n            ]\n        };\n    }\n}';
+ await mount(page,{text});await select(page,0);await page.keyboard.press('ControlOrMeta+a');await page.keyboard.press('ControlOrMeta+Alt+\\');
+ expect(await documentText(page)).toBe(expected);
+ await page.evaluate(()=>window.liveFixture.editor.undo());expect(await documentText(page)).toBe(text);
+});
