@@ -41,14 +41,18 @@ jobs:
           rustup toolchain install 1.94.0 --profile minimal
           uname -m
           xcodebuild -version
-      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      - id: native_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
             .cargo/registry
             .cargo/git
             .runtime-target
             src-tauri/target
-          key: macos-${{ matrix.arch }}-rust194-${{ hashFiles('**/Cargo.lock') }}
+          key: macos-v2-${{ matrix.arch }}-rust194-${{ hashFiles('src-tauri/Cargo.lock', 'resources/toolchains/argent-master/Cargo.lock') }}
+          restore-keys: |
+            macos-v2-${{ matrix.arch }}-rust194-
+            macos-${{ matrix.arch }}-rust194-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Install WebKit
@@ -102,7 +106,7 @@ jobs:
             .cargo/git
             .runtime-target
             src-tauri/target
-          key: macos-${{ matrix.arch }}-rust194-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ steps.native_cache.outputs.cache-primary-key }}
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
