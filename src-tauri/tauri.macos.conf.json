@@ -1,0 +1,8 @@
+{
+  "bundle": {
+    "macOS": {
+      "minimumSystemVersion": "13.5",
+      "hardenedRuntime": true
+    }
+  }
+}

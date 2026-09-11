@@ -19,6 +19,7 @@ keyring = { version = "3", features = ["windows-native", "apple-native"] }
 
 
 [features]
+ci-update-test = []
 custom-protocol = ["tauri/custom-protocol"]
 
 [target.'cfg(unix)'.dependencies]

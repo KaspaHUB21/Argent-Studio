@@ -7,7 +7,7 @@ const root=path.resolve('test-output/macos-path-probe');fs.mkdirSync(path.join(r
 const source=fs.readFileSync('src-tauri/src/ai_files.rs','utf8').replace('#[tauri::command]','');
 fs.writeFileSync(path.join(root,'src/ai_files.rs'),source);
 fs.copyFileSync('src-tauri/src/file_move.rs',path.join(root,'src/file_move.rs'));
-fs.writeFileSync(path.join(root,'Cargo.toml'),'[package]\nname="macos-path-probe"\nversion="0.1.0"\nedition="2021"\n[dependencies]\nlibc="0.2"\ntempfile="3"\n');
+fs.writeFileSync(path.join(root,'Cargo.toml'),'[package]\nname="macos-path-probe"\nversion="0.1.0"\nedition="2021"\n[dependencies]\nlibc="0.2"\nkeyring={version="3",features=["apple-native"]}\ntempfile="3"\n');
 fs.writeFileSync(path.join(root,'src/main.rs'),`
 mod ai_files;
 mod file_move;
@@ -23,6 +23,15 @@ fn main(){
  std::os::unix::fs::symlink(outside.path(),canonical.join("linked")).unwrap();
  assert!(ai_files::read_ai_file(canonical.to_string_lossy().into(),"linked/secret.ag".into(),false).is_err());
  assert!(ai_files::read_ai_file(canonical.join("linked").to_string_lossy().into(),"secret.ag".into(),false).is_err());
+ let alias_temp=tempfile::tempdir_in("/tmp").unwrap();std::fs::write(alias_temp.path().join("ok.ag"),"public").unwrap();
+ assert_eq!(read(alias_temp.path()).unwrap().as_deref(),Some("public"));
+ std::os::unix::fs::symlink(outside.path().join("secret.ag"),canonical.join("linked.ag")).unwrap();
+ assert!(ai_files::read_ai_file(canonical.to_string_lossy().into(),"linked.ag".into(),false).is_err());
+ let credential=keyring::Entry::new("studio.argent.ci-test",&format!("temporary-{}",std::process::id())).unwrap();
+ credential.set_password("disposable-test-value").unwrap();
+ let secret=credential.get_password();credential.delete_credential().unwrap();
+ assert_eq!(secret.unwrap(),"disposable-test-value");assert!(matches!(credential.get_password(),Err(keyring::Error::NoEntry)));
+ println!("Native Keychain set/read/delete passed.");
  let volume=std::env::var("ARGENT_TEST_VOLUME").expect("Disposable test volume required");
  let target=tempfile::tempdir_in(volume).unwrap();
  let from=root.join("move.ag");let to=target.path().join("move.ag");

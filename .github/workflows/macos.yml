@@ -78,6 +78,14 @@ jobs:
         run: node scripts/ci-macos-smoke.mjs
       - name: Package test application
         run: ditto -c -k --sequesterRsrc --keepParent 'src-tauri/target/release/bundle/macos/Argent Studio.app' 'test-output/Argent-Studio-macos-${{ matrix.arch }}-test.zip'
+      - name: Prepare isolated update test
+        run: node scripts/prepare-macos-update-test.mjs
+      - name: Build isolated updater application
+        run: pnpm tauri build --bundles app --features ci-update-test --config test-output/updater/tauri.test.json
+      - name: Verify native update and relaunch
+        id: updater
+        continue-on-error: true
+        run: node scripts/test-macos-update.mjs
       - name: Preserve build cache
         if: always()
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
@@ -103,7 +111,7 @@ jobs:
       - name: Require all checks
         if: always()
         env:
-          RESULTS: ${{ steps.application.outcome }} ${{ steps.language.outcome }} ${{ steps.browser.outcome }} ${{ steps.rust.outcome }} ${{ steps.native.outcome }}
+          RESULTS: ${{ steps.application.outcome }} ${{ steps.language.outcome }} ${{ steps.browser.outcome }} ${{ steps.rust.outcome }} ${{ steps.native.outcome }} ${{ steps.updater.outcome }}
         run: |
           for result in $RESULTS; do
             test "$result" = success || exit 1

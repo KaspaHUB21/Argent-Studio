@@ -6,7 +6,7 @@ export function createUpdater({getSettings,prepareUpdate,isSupported=()=>true,ch
  function notice(text){const dialog=element('dialog','message-dialog update-dialog'),title=element('h2','',t('Programmaktualisierung','Application update')),message=element('p','',text),buttons=element('div','dialog-buttons'),close=element('button','',t('Schließen','Close'));dialog.setAttribute('aria-label',title.textContent);close.onclick=()=>dialog.close();buttons.append(close);dialog.append(title,message,buttons);dialog.addEventListener('close',()=>{dialog.remove();if(active===dialog)active=null;},{once:true});document.body.append(dialog);active=dialog;dialog.showModal();}
  async function checkForUpdates({manual=false}={}){
   if(checking||active)return;
-  if(!isSupported()){if(manual)notice(t('Updates werden in der installierten Windows-Anwendung unterstützt.','Updates are supported in the installed Windows application.'));return;}
+  if(!isSupported()){if(manual)notice(t('Updates werden in der installierten Windows- und macOS-Anwendung unterstützt.','Updates are supported in the installed Windows and macOS application.'));return;}
   checking=true;
   try{const update=await check();if(update)showUpdate(update);else if(manual)notice(t('Du verwendest bereits die aktuelle Version.','You are already using the latest version.'));}
   catch{if(manual)notice(t('Updates konnten nicht geprüft werden. Bitte prüfe deine Internetverbindung und versuche es später erneut.','Could not check for updates. Please check your internet connection and try again later.'));}

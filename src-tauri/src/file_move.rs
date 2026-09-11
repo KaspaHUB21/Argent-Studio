@@ -3,22 +3,25 @@ use std::{io, path::Path};
 /// Move a project file to trash without replacing an existing backup.
 /// Windows can copy across volumes; an undeleted source is reported as a failure.
 pub fn move_to_trash(source: &Path, destination: &Path) -> io::Result<()> {
-    #[cfg(not(windows))]
-    { move_unix(source, destination) }
+    #[cfg(target_os="macos")]
+    { move_macos(source, destination) }
+    #[cfg(not(any(windows, target_os="macos")))]
+    { std::fs::rename(source, destination) }
     #[cfg(windows)]
     { move_windows(source, destination) }
 }
 
-#[cfg(unix)]
-fn move_unix(source: &Path, destination: &Path) -> io::Result<()> {
+#[cfg(target_os="macos")]
+fn move_macos(source: &Path, destination: &Path) -> io::Result<()> {
     use std::fs::{self, OpenOptions};
     use std::os::unix::fs::OpenOptionsExt;
-    // Hard-linking is exclusive and preserves metadata on the same volume.
-    match fs::hard_link(source, destination) {
-        Ok(()) => return fs::remove_file(source),
-        Err(error) if error.raw_os_error() == Some(libc::EXDEV) => {},
-        Err(error) => return Err(error),
-    }
+    use std::{ffi::CString, os::unix::ffi::OsStrExt};
+    let from = CString::new(source.as_os_str().as_bytes()).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput,e))?;
+    let to = CString::new(destination.as_os_str().as_bytes()).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput,e))?;
+    // Atomic same-volume move; never overwrite a previous backup.
+    if unsafe { libc::renamex_np(from.as_ptr(), to.as_ptr(), libc::RENAME_EXCL) } == 0 { return Ok(()); }
+    let error = io::Error::last_os_error();
+    if error.raw_os_error() != Some(libc::EXDEV) { return Err(error); }
     let mut input = OpenOptions::new().read(true).custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK).open(source)?;
     let metadata = input.metadata()?;
     if !metadata.is_file() { return Err(io::Error::other("Trash requires a regular file")); }
@@ -84,6 +87,7 @@ mod tests {
         assert_eq!(std::fs::read(&destination).unwrap(), b"app Tickets {}\n");
     }
 
+    #[cfg(any(windows, target_os="macos"))]
     #[test]
     fn existing_backup_preserves_both_files() {
         let directory = tempfile::tempdir().unwrap();

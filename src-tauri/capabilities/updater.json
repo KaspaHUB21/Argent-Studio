@@ -1,11 +1,12 @@
 {
-  "identifier": "windows-updater",
-  "description": "Signed Windows application updates",
+  "identifier": "desktop-updater",
+  "description": "Signed Windows and macOS application updates",
   "windows": [
     "main"
   ],
   "platforms": [
-    "windows"
+    "windows",
+    "macOS"
   ],
   "permissions": [
     "updater:default"

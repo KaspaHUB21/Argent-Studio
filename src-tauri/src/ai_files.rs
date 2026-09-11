@@ -55,7 +55,8 @@ fn open_scoped_with(root: &Path, relative: &Path, missing: bool, after_root_open
 fn macos_system_root(root: &Path) -> Result<PathBuf, String> {
     for (alias, target) in [("/var", "/private/var"), ("/tmp", "/private/tmp"), ("/etc", "/private/etc")] {
         if let Ok(rest) = root.strip_prefix(alias) {
-            if std::fs::read_link(alias).map_err(|e| e.to_string())? != Path::new(target) {
+            let link = std::fs::read_link(alias).map_err(|e| e.to_string())?;
+            if Path::new("/").join(link) != Path::new(target) {
                 return Err("Unexpected macOS system alias".into());
             }
             return Ok(Path::new(target).join(rest));
