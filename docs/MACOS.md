@@ -1,12 +1,12 @@
 # macOS builds and release prerequisites
 
-The test workflows build separate native applications for Apple Silicon and Intel on macOS 15. The application declares macOS 13.5 as its minimum because the bundled Node 24 runtime requires it. Earlier macOS versions have not been validated.
+The test workflows build separate native applications for Apple Silicon and Intel on macOS 15. The application declares macOS 13.5 as its minimum because the bundled Node 24 runtime requires it. macOS 13.5 and 14 have not been validated by these workflows.
 
 ## Local development and testing
 
 Install Node 24, pnpm 11, Rust 1.94 and Xcode command-line tools. Run `pnpm install --frozen-lockfile`, `node scripts/build-runtime.mjs`, `pnpm test`, `pnpm run test:services`, and `ARGENT_BROWSER=webkit pnpm exec playwright test` after installing Playwright WebKit. Build a test application with `pnpm tauri build --bundles app --config .github/tauri.ci.json`, then run `node scripts/ci-macos-smoke.mjs`.
 
-The focused diagnostics additionally exercise real APFS cross-volume moves and macOS system aliases. The full workflow runs a separate update-only build using a temporary key and loopback feed. That build must never be published. It verifies signed downloads, signature rejection, replacement of an isolated application copy, and launch after replacement. Production builds keep the existing updater public key and HTTPS endpoint.
+The focused diagnostics additionally exercise real APFS cross-volume moves, destination collisions, concurrent saves, failed-copy recovery, macOS system aliases, symlink rejection, and native Keychain storage. The full workflow runs a separate update-only build using a temporary key and loopback feed. That build must never be published. It verifies the native updater IPC, signed downloads, signature rejection, replacement of an isolated application copy, launch after replacement, and preservation of edited user projects. Native quit tests exercise cancellation and saving before exit. The application smoke tests also check the default Documents project directory. Production builds keep the existing updater public key and HTTPS endpoint.
 
 ## Signing prerequisites
 
