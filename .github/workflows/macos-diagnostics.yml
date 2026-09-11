@@ -30,6 +30,7 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm exec playwright install webkit
       - name: Structure editing with native paths
+        timeout-minutes: 5
         id: structure
         continue-on-error: true
         run: node --test tests/structure-browser.test.mjs

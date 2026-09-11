@@ -10,6 +10,7 @@ const source = path.join(root, 'resources/toolchains/argent-master');
 const bin = path.join(root, 'resources/bin');
 const suffix = process.platform === 'win32' ? '.exe' : '';
 const env = { ...process.env, CARGO_HOME: path.join(root, '.cargo'), CARGO_TARGET_DIR: path.join(root, '.runtime-target') };
+if(process.platform==='darwin')env.MACOSX_DEPLOYMENT_TARGET ||= '13.5';
 mkdirSync(path.join(bin, 'runtime'), { recursive: true });
 for (const args of [['build', '--locked', '--release', '--bin', 'argentc'], ['build', '--locked', '--release', '--example', 'studio_test']]) {
   const result = spawnSync('cargo', args, { cwd: source, env, stdio: 'inherit' });
