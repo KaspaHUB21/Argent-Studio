@@ -3,7 +3,7 @@ import {createServer} from 'vite';
 let vite,baseUrl;
 test.beforeAll(async()=>{vite=await createServer({server:{host:'127.0.0.1',port:1455,strictPort:false,hmr:false,watch:null},logLevel:'error'});await vite.listen();baseUrl=vite.resolvedUrls.local[0];});
 test.afterAll(async()=>{await vite?.close();});
-test.use({channel:'msedge',viewport:{width:900,height:600}});
+test.use({browserName:process.env.ARGENT_BROWSER==='webkit'?'webkit':'chromium',channel:process.env.ARGENT_BROWSER==='webkit'?undefined:'msedge',viewport:{width:900,height:600}});
 async function mount(page,{language='en',mode='available',dark=false}={}){
  await page.route('**/updater-fixture.html',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><html><head><link rel="stylesheet" href="/frontend/style.css"><link rel="stylesheet" href="/frontend/updater.css"></head><body></body></html>'}));
  await page.goto(baseUrl+'updater-fixture.html');

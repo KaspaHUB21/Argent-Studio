@@ -3,7 +3,7 @@ import {createServer} from 'vite';
 let vite,url;
 test.beforeAll(async()=>{vite=await createServer({server:{host:'127.0.0.1',port:1442,strictPort:false,hmr:false,watch:null},logLevel:'error'});await vite.listen();url=vite.resolvedUrls.local[0];});
 test.afterAll(async()=>vite?.close());
-test.use({channel:'msedge'});
+test.use({browserName:process.env.ARGENT_BROWSER==='webkit'?'webkit':'chromium',channel:process.env.ARGENT_BROWSER==='webkit'?undefined:'msedge'});
 test('editor search and assistant controls switch languages while preserving message content',async({page})=>{
  await page.route('**/translation-fixture',route=>route.fulfill({contentType:'text/html',body:'<div id="editor"></div><div id="assistant"></div>'}));
  await page.goto(url+'translation-fixture');

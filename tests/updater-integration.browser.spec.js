@@ -3,7 +3,7 @@ import {createServer} from 'vite';
 let vite,baseUrl;
 test.beforeAll(async()=>{vite=await createServer({server:{host:'127.0.0.1',port:1456,strictPort:false,hmr:false,watch:null},logLevel:'error'});await vite.listen();baseUrl=vite.resolvedUrls.local[0];});
 test.afterAll(async()=>{await vite?.close();});
-test.use({channel:'msedge',viewport:{width:1450,height:930}});
+test.use({browserName:process.env.ARGENT_BROWSER==='webkit'?'webkit':'chromium',channel:process.env.ARGENT_BROWSER==='webkit'?undefined:'msedge',viewport:{width:1450,height:930}});
 test.beforeEach(async({page})=>{
  await page.route('**/*plugin-updater*',route=>route.fulfill({contentType:'text/javascript',body:'export async function check(){return window.fixtureUpdate;}'}));
  await page.addInitScript(()=>{

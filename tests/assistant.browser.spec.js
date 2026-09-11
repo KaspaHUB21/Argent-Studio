@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 import {createServer} from 'node:http';
 import {readFile} from 'node:fs/promises';
-test.use({channel:'msedge'});
+test.use({browserName:process.env.ARGENT_BROWSER==='webkit'?'webkit':'chromium',channel:process.env.ARGENT_BROWSER==='webkit'?undefined:'msedge'});
 let server,url;
 test.beforeAll(async()=>{server=createServer(async(req,res)=>{try{if(req.url==='/'){res.setHeader('Content-Type','text/html');res.end('<html><head><link rel="stylesheet" href="/assistant.css"></head><body><div id="assistant" style="width:390px;height:700px"></div></body></html>');}else{res.setHeader('Content-Type',req.url.endsWith('.css')?'text/css':'text/javascript');res.end(await readFile(new URL('../frontend/'+req.url.slice(1),import.meta.url)));}}catch{res.writeHead(404).end();}});await new Promise(r=>server.listen(0,'127.0.0.1',r));url='http://127.0.0.1:'+server.address().port;});
 test.afterAll(()=>server.close());

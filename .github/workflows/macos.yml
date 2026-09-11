@@ -1,7 +1,7 @@
 name: macOS compatibility tests
 on:
   push:
-    branches: [test/macos-compatibility]
+    branches: [test/macos-compatibility, test/macos-diagnostics]
   workflow_dispatch:
 permissions:
   contents: read
@@ -38,7 +38,7 @@ jobs:
           rustup toolchain install 1.94.0 --profile minimal
           uname -m
           xcodebuild -version
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
             .cargo/registry
@@ -63,7 +63,7 @@ jobs:
         continue-on-error: true
         run: |
           pnpm exec playwright install webkit
-          pnpm exec playwright test tests/full-app.browser.spec.js tests/structure-resize.browser.spec.js
+          pnpm exec playwright test
       - name: Build frontend
         run: pnpm run build
       - name: Native Rust tests
@@ -78,6 +78,16 @@ jobs:
         run: node scripts/ci-macos-smoke.mjs
       - name: Package test application
         run: ditto -c -k --sequesterRsrc --keepParent 'src-tauri/target/release/bundle/macos/Argent Studio.app' 'test-output/Argent-Studio-macos-${{ matrix.arch }}-test.zip'
+      - name: Preserve build cache
+        if: always()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            .cargo/registry
+            .cargo/git
+            .runtime-target
+            src-tauri/target
+          key: macos-${{ matrix.arch }}-rust194-${{ hashFiles('**/Cargo.lock') }}
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

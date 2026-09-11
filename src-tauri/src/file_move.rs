@@ -1,12 +1,36 @@
 use std::{io, path::Path};
 
-/// Move a project file to trash without replacing an existing Windows backup.
+/// Move a project file to trash without replacing an existing backup.
 /// Windows can copy across volumes; an undeleted source is reported as a failure.
 pub fn move_to_trash(source: &Path, destination: &Path) -> io::Result<()> {
     #[cfg(not(windows))]
-    { std::fs::rename(source, destination) }
+    { move_unix(source, destination) }
     #[cfg(windows)]
     { move_windows(source, destination) }
+}
+
+#[cfg(unix)]
+fn move_unix(source: &Path, destination: &Path) -> io::Result<()> {
+    use std::fs::{self, OpenOptions};
+    use std::os::unix::fs::OpenOptionsExt;
+    // Hard-linking is exclusive and preserves metadata on the same volume.
+    match fs::hard_link(source, destination) {
+        Ok(()) => return fs::remove_file(source),
+        Err(error) if error.raw_os_error() == Some(libc::EXDEV) => {},
+        Err(error) => return Err(error),
+    }
+    let mut input = OpenOptions::new().read(true).custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK).open(source)?;
+    let metadata = input.metadata()?;
+    if !metadata.is_file() { return Err(io::Error::other("Trash requires a regular file")); }
+    let mut output = OpenOptions::new().write(true).create_new(true).mode(0o600).open(destination)?;
+    // Preserve the original on any copy, sync, permission, or removal failure.
+    let copied = (|| -> io::Result<()> {
+        std::io::copy(&mut input, &mut output)?;
+        output.set_permissions(metadata.permissions())?;
+        output.sync_all()
+    })();
+    if let Err(error) = copied { drop(output); let _ = fs::remove_file(destination); return Err(error); }
+    fs::remove_file(source)
 }
 
 #[cfg(windows)]
@@ -60,7 +84,6 @@ mod tests {
         assert_eq!(std::fs::read(&destination).unwrap(), b"app Tickets {}\n");
     }
 
-    #[cfg(windows)]
     #[test]
     fn existing_backup_preserves_both_files() {
         let directory = tempfile::tempdir().unwrap();

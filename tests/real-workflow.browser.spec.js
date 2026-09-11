@@ -5,23 +5,24 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {createServer} from 'vite';
 const exec=promisify(execFile),root=process.cwd(),resources=path.join(root,'resources');
+const suffix=process.platform==='win32'?'.exe':'';
 let server,url;
 test.beforeAll(async()=>{server=await createServer({server:{port:1443,strictPort:false,host:'127.0.0.1',hmr:false}});await server.listen();url=server.resolvedUrls.local[0];});
 test.afterAll(async()=>await server?.close());
-test.use({channel:'msedge',viewport:{width:1450,height:900}});
+test.use({browserName:process.env.ARGENT_BROWSER==='webkit'?'webkit':'chromium',channel:process.env.ARGENT_BROWSER==='webkit'?undefined:'msedge',viewport:{width:1450,height:900}});
 test('complete editor workflow uses real compiler, scanner and VM on isolated files',async({page})=>{
  test.setTimeout(120000);const project=path.join(root,'test-output','workflow-'+Date.now());await fs.cp(path.join(resources,'examples/catalog/tickets'),project,{recursive:true});const ticketPath=path.join(project,'tickets.ag');await fs.writeFile(ticketPath,(await fs.readFile(ticketPath,'utf8')).replace(/\r\n?/g,'\n').replace(/\n/g,'\r\n'));const errors=[];page.on('pageerror',e=>errors.push(e.message));let buildResult;
  async function command(name,a){switch(name){
- case 'app_info':return {resources,dataDir:path.dirname(project),projectsDir:path.dirname(project),compiler:path.join(resources,'bin/argentc.exe'),platform:'windows'};
+ case 'app_info':return {resources,dataDir:path.dirname(project),projectsDir:path.dirname(project),compiler:path.join(resources,'bin/argentc'+suffix),platform:process.platform==='win32'?'windows':process.platform==='darwin'?'macos':process.platform};
  case 'load_settings':return {language:'de',darkMode:false};
  case 'clone_example':return {root:project,entry:path.join(project,'tickets.ag'),app:'Tickets'};
  case 'list_directory':return Promise.all((await fs.readdir(a.path,{withFileTypes:true})).map(f=>({name:f.name,path:path.join(a.path,f.name),isDirectory:f.isDirectory()})));
  case 'read_file':return fs.readFile(a.path,'utf8');
  case 'write_file':await fs.mkdir(path.dirname(a.path),{recursive:true});return fs.writeFile(a.path,a.text);
- case 'language_request':{const result=await new Promise((resolve,reject)=>{const child=execFile(path.join(resources,'bin/runtime/node.exe'),[path.join(resources,'assets/language/studio-service.js')],{maxBuffer:8e6},(e,stdout)=>e?reject(e):resolve(stdout));child.stdin.end(JSON.stringify({...a.request,standardLibrary:path.join(resources,'toolchains/argent-master/std/core.ag')}));});return JSON.parse(result);}
- case 'build':{const output=path.join(project,'build',String(Date.now()));await fs.mkdir(output,{recursive:true});const args=['build',a.entry,'--out',output];if(a.appName)args.push('--app',a.appName);let r;try{r=await exec(path.join(resources,'bin/argentc.exe'),args,{maxBuffer:8e6});r.code=0;}catch(e){r=e;}const files=(await fs.readdir(output,{withFileTypes:true,recursive:true})).filter(f=>f.isFile()).map(f=>({name:f.name,path:path.join(f.parentPath||output,f.name),isDirectory:false}));return buildResult={exitCode:r.code,stdout:r.stdout,stderr:r.stderr,output,success:r.code===0,files};}
- case 'inspect':return {...await exec(path.join(resources,'bin/argentc.exe'),['inspect',a.output]),exitCode:0};
- case 'run_scenario_json':case 'run_scenario':{const result=await new Promise((resolve,reject)=>{const child=execFile(path.join(resources,'bin/ArgentTestRunner-v1.exe'),[],{maxBuffer:8e6},(e,stdout,stderr)=>e?reject(Error(stderr)):resolve(stdout));child.stdin.end(a.scenarioJson?'{"artifact":'+JSON.stringify(a.artifact)+',"scenario":'+a.scenarioJson+'}':JSON.stringify({artifact:a.artifact,scenario:a.scenario}));});return JSON.parse(result);}
+ case 'language_request':{const result=await new Promise((resolve,reject)=>{const child=execFile(path.join(resources,'bin/runtime/node'+suffix),[path.join(resources,'assets/language/studio-service.js')],{maxBuffer:8e6},(e,stdout)=>e?reject(e):resolve(stdout));child.stdin.end(JSON.stringify({...a.request,standardLibrary:path.join(resources,'toolchains/argent-master/std/core.ag')}));});return JSON.parse(result);}
+ case 'build':{const output=path.join(project,'build',String(Date.now()));await fs.mkdir(output,{recursive:true});const args=['build',a.entry,'--out',output];if(a.appName)args.push('--app',a.appName);let r;try{r=await exec(path.join(resources,'bin/argentc'+suffix),args,{maxBuffer:8e6});r.code=0;}catch(e){r=e;}const files=(await fs.readdir(output,{withFileTypes:true,recursive:true})).filter(f=>f.isFile()).map(f=>({name:f.name,path:path.join(f.parentPath||output,f.name),isDirectory:false}));return buildResult={exitCode:r.code,stdout:r.stdout,stderr:r.stderr,output,success:r.code===0,files};}
+ case 'inspect':return {...await exec(path.join(resources,'bin/argentc'+suffix),['inspect',a.output]),exitCode:0};
+ case 'run_scenario_json':case 'run_scenario':{const result=await new Promise((resolve,reject)=>{const child=execFile(path.join(resources,'bin/ArgentTestRunner-v1'+suffix),[],{maxBuffer:8e6},(e,stdout,stderr)=>e?reject(Error(stderr)):resolve(stdout));child.stdin.end(a.scenarioJson?'{"artifact":'+JSON.stringify(a.artifact)+',"scenario":'+a.scenarioJson+'}':JSON.stringify({artifact:a.artifact,scenario:a.scenario}));});return JSON.parse(result);}
  case 'cancel_operation':return;
  default:throw Error('Unknown integration command '+name);
  }}

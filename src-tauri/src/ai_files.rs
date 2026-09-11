@@ -50,10 +50,28 @@ fn open_scoped_with(root: &Path, relative: &Path, missing: bool, after_root_open
     unreachable!()
 }
 
+// Resolve only Apple's fixed system aliases. Project-controlled links remain forbidden.
+#[cfg(target_os="macos")]
+fn macos_system_root(root: &Path) -> Result<PathBuf, String> {
+    for (alias, target) in [("/var", "/private/var"), ("/tmp", "/private/tmp"), ("/etc", "/private/etc")] {
+        if let Ok(rest) = root.strip_prefix(alias) {
+            if std::fs::read_link(alias).map_err(|e| e.to_string())? != Path::new(target) {
+                return Err("Unexpected macOS system alias".into());
+            }
+            return Ok(Path::new(target).join(rest));
+        }
+    }
+    Ok(root.to_owned())
+}
+
 #[cfg(unix)]
 fn open_scoped(root: &Path, relative: &Path, missing: bool) -> Result<Option<File>, String> {
     use std::{ffi::CString, os::{fd::{AsRawFd, FromRawFd}, unix::ffi::OsStrExt}};
     if !root.is_absolute(){return Err("Absolute project root required".into());}
+    #[cfg(target_os="macos")]
+    let normalized_root = macos_system_root(root)?;
+    #[cfg(target_os="macos")]
+    let root = normalized_root.as_path();
     let parts=components(relative)?;
     let mut directory=File::open("/").map_err(|e|e.to_string())?;
     let root_parts:Vec<_>=root.components().filter(|p| !matches!(p,Component::RootDir)).collect();
