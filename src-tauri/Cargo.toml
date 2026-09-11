@@ -1,6 +1,6 @@
 [package]
 name = "argent-studio-tauri"
-version = "0.45.7"
+version = "0.45.8"
 edition = "2021"
 description = "Argent Studio desktop editor"
 

@@ -1,0 +1,16 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {analyzeLive} from '../frontend/live-analysis.js';
+import {analyzeSemantics} from '../frontend/live-semantics.js';
+const check=(text,project)=>analyzeSemantics(text,analyzeLive(text),project);
+test('unknown identifiers suggest a unique visible correction',()=>{const text='fn run(int balance) -> int { return balanc; }',d=check(text).find(d=>d.code==='unknown-name');assert.equal(d.fix.insert,'balance');assert.equal(text.slice(d.from,d.to),'balanc');assert.ok(d.messageDe&&d.messageEn);});
+test('unused parameters and variables fade, comments and strings are not uses',()=>{const d=check('fn run(int unused, int used) { int local = used; // local\n "unused"; }').filter(d=>d.code==='unused-binding');assert.equal(d.length,2);assert.ok(d.every(d=>d.fade));});
+test('shadowed names have navigation to outer binding',()=>{const d=check('fn run(int count) { { int count = 1; require(count > 0); } }').find(d=>d.code==='shadowed-binding');assert.ok(d.related[0].from<d.from);});
+test('duplicate definitions mark both names and link them',()=>{const d=check('fn run(int count, int count) { }').filter(d=>d.code==='duplicate-definition');assert.equal(d.length,2);assert.equal(d[0].related[0].from,d[1].from);});
+test('incomplete code, unresolved imports, property names and labels do not produce unknown diagnostics',()=>{for(const text of ['fn run() { unknown','fn run() { unknown }','fn run(int known) { known.property; }','fn run() { int record = { label: 1 }; }','import "other.ag"; fn run() { external(); }'])assert.equal(check(text).filter(d=>d.code==='unknown-name').length,0,text);});
+test('clauses bind routes and observed aliases and can use parameters',()=>{const text='actor A { entry run(cov_id id) observes asset by id { inputs { item: A, } } emits { next: A, } { require(asset.value == next.value); } }';assert.equal(check(text).length,0);});
+test('resolved imported symbols and custom type locals are accepted',()=>{const text='import "other.ag"; fn run() { RemoteState local = external(); require(local.value > 0); }';assert.equal(check(text,{complete:true,hasImports:true,symbols:[{name:'RemoteState',kind:'state'},{name:'external',kind:'fn'}]}).length,0);});
+test('catalog files do not generate unknown names or duplicate-definition errors',()=>{const root=new URL('../resources/examples/catalog/',import.meta.url);for(const path of fs.readdirSync(root,{recursive:true}).filter(p=>p.endsWith('.ag'))){const text=fs.readFileSync(new URL(path.replaceAll('\\','/'),root),'utf8');const errors=check(text).filter(d=>['unknown-name','duplicate-definition'].includes(d.code));assert.deepEqual(errors,[],path);}});
+
+test('imported and expanded state fields are visible in the owning actor',()=>{const text='import "state.ag"; actor A owns Remote { entry go() { require(balance > 0); } }';assert.equal(check(text,{complete:true,hasImports:true,symbols:[{name:'Remote',kind:'state',fields:[{name:'balance',type:'int'}]}]}).length,0);const local='state Base { int balance; } state Derived expands Base { int count; } actor A owns Derived { entry go() { require(balance > count); } }';assert.equal(check(local).length,0);});

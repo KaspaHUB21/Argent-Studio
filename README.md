@@ -16,6 +16,8 @@ Download the macOS preview ZIP for Apple Silicon (arm64) or Intel (x64) from [Gi
 
 - Projects, editable examples, named project duplication, and conflict-aware saving.
 - Code highlighting, completion, folding, and linked source and structure views.
+- Local live editing: inline suggestions, parameter hints, scoped name highlighting, quiet syntax marks, quick fixes and sticky block context. See [live editing](docs/LIVE-EDITING.md) for behavior and limits.
+- Conservative live name, argument, type, unused-code, duplicate-definition, return-flow and import checks; see [semantic checks](docs/SEMANTIC-CHECKS.md).
 - Local compilation, generated artifacts, and transaction simulation with lossless integer values.
 - Light and dark themes, English and German interface localization.
 - Optional AI assistance, disabled by default. API credentials use the operating system credential store.

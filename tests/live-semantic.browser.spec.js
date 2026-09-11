@@ -1,0 +1,36 @@
+import {test,expect} from '@playwright/test';
+import {createServer} from 'vite';
+let vite,url;
+test.beforeAll(async()=>{vite=await createServer({server:{host:'127.0.0.1',port:1474,strictPort:false,hmr:false,watch:null},logLevel:'error'});await vite.listen();url=vite.resolvedUrls.local[0];});
+test.afterAll(async()=>vite?.close());
+test.use({browserName:process.env.ARGENT_BROWSER==='webkit'?'webkit':'chromium',channel:process.env.ARGENT_BROWSER==='webkit'?undefined:'msedge'});
+async function mount(page,{text,language='en',darkMode=false,readOnly=false,provider='none',files={}}){
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.route('**/semantic-fixture',r=>r.fulfill({contentType:'text/html',body:'<style>body{margin:0}#editor{height:650px;width:950px}</style><div id="editor"></div>'}));await page.goto(url+'semantic-fixture');
+ await page.evaluate(async o=>{const {createEditor}=await import('/frontend/editor.js');const {inspectLiveProject}=await import('/frontend/live-project.js');const f=window.fixture={settings:{language:o.language,darkMode:o.darkMode},revision:0,pending:[],files:o.files,navigations:[],calls:0};
+ const inspectProject=o.provider==='pending'?()=>{f.calls++;return new Promise(resolve=>f.pending.push(resolve));}:o.provider==='files'?text=>{f.calls++;return inspectLiveProject({path:'/project/main.ag',root:'/project',text,invoke:async(_,args)=>f.files[args.path]??null});}:undefined;
+ f.editor=createEditor(document.querySelector('#editor'),{text:o.text,readOnly:o.readOnly,language:async()=>({items:[]}),getSettings:()=>f.settings,getProjectRevision:()=>f.revision,inspectProject,onNavigate:t=>f.navigations.push(t)});
+ },{text,language,darkMode,readOnly,provider,files});return errors;
+}
+const mark=(page,code)=>page.locator(`[data-live-code="${code}"]`);
+const textOf=page=>page.evaluate(()=>window.fixture.editor.getText());
+const waitMark=async(page,code)=>expect(mark(page,code).first()).toBeVisible({timeout:4000});
+async function popup(page,code){const title=await mark(page,code).first().getAttribute('title');await page.locator('.cm-live-diagnostic-marker').evaluateAll((nodes,title)=>nodes.find(n=>n.title===title)?.click(),title);await expect(page.locator('.cm-live-diagnostic-popup')).toBeVisible();}
+for(const language of ['en','de'])for(const darkMode of [false,true])test(`semantic typo suggestion is localized and undoable ${language} ${darkMode?'dark':'light'}`,async({page})=>{
+ const source='fn run(int balance) -> int {\n    require(balance > 0);\n    return balanc;\n}';const errors=await mount(page,{text:source,language,darkMode});await waitMark(page,'unknown-name');await popup(page,'unknown-name');await expect(page.locator('.cm-live-diagnostic-popup')).toContainText(language==='de'?'Meintest du':'Did you mean');await page.locator('#editor').screenshot({path:`test-output/semantic-${language}-${darkMode?'dark':'light'}.png`});await page.locator('.cm-live-fix').click();expect(await textOf(page)).toBe(source.replace('return balanc','return balance'));await expect(mark(page,'unknown-name')).toHaveCount(0);await page.evaluate(()=>window.fixture.editor.undo());expect(await textOf(page)).toBe(source);expect(errors).toEqual([]);
+});
+test('semantic argument, type, unused, shadow and duplicate marks correspond to actual code',async({page})=>{
+ const source='fn add(int n) -> int { return n; }\nfn run(int outer) {\n    int idle = 1;\n    add(1, 2);\n    add(true);\n    { int outer = 2; require(outer > 0); }\n}\nfn duplicate(int same, int same) { }';const errors=await mount(page,{text:source});for(const code of ['argument-count','type-mismatch','unused-binding','shadowed-binding','duplicate-definition'])await waitMark(page,code);await expect(page.locator('.cm-live-faded').filter({hasText:'idle'})).toBeVisible();await expect(mark(page,'argument-count')).toContainText('add(1, 2)');await expect(mark(page,'type-mismatch')).toContainText('true');await popup(page,'duplicate-definition');await page.locator('.cm-live-related').first().click();const selected=await page.evaluate(()=>{const e=window.fixture.editor,v=e.view.state.selection.main;return {from:v.from,text:e.getText().slice(v.from,v.to)};});expect(selected).toEqual({from:source.lastIndexOf('same'),text:'same'});expect(errors).toEqual([]);
+});
+test('return-flow checks fade unreachable statements and mark incomplete return paths',async({page})=>{
+ const source='fn missing(int n) -> int {\n    if (n > 0) { return n; }\n}\nfn finished() -> int {\n    return 1;\n    require(false);\n}';const errors=await mount(page,{text:source});await waitMark(page,'missing-return');await waitMark(page,'unreachable-code');await expect(mark(page,'missing-return')).toHaveText('missing');await expect(mark(page,'unreachable-code')).toHaveClass(/cm-live-faded/);expect(errors).toEqual([]);
+});
+test('project import errors clear after sibling refresh without editing current document',async({page})=>{
+ const source='import "helper.ag";\nfn main() -> int { return helper(1); }';const errors=await mount(page,{text:source,provider:'files'});await waitMark(page,'import-missing');await page.evaluate(()=>{const f=window.fixture;f.files['helper.ag']='fn helper(int n) -> int { return n; }';f.revision++;f.editor.refreshLive();});await expect(mark(page,'import-missing')).toHaveCount(0);await expect.poll(()=>page.evaluate(()=>window.fixture.calls)).toBeGreaterThan(1);await page.waitForTimeout(150);await expect(mark(page,'unknown-name')).toHaveCount(0);expect(await textOf(page)).toBe(source);expect(errors).toEqual([]);
+});
+test('stale asynchronous project results never replace current diagnostics',async({page})=>{
+ const source='fn main() -> int { return 1; }';const errors=await mount(page,{text:source,provider:'pending'});await expect.poll(()=>page.evaluate(()=>window.fixture.pending.length)).toBe(1);await page.evaluate(()=>{const f=window.fixture;f.revision++;f.editor.refreshLive();});await expect.poll(()=>page.evaluate(()=>window.fixture.pending.length)).toBe(2);await page.evaluate(()=>window.fixture.pending[1]({complete:true,hasImports:false,symbols:[],diagnostics:[]}));await page.evaluate(()=>window.fixture.pending[0]({complete:true,hasImports:false,symbols:[],diagnostics:[{code:'stale-test',from:3,to:7,severity:'error',messageEn:'Stale result',messageDe:'Veraltetes Ergebnis'}]}));await page.waitForTimeout(100);await expect(mark(page,'stale-test')).toHaveCount(0);expect(errors).toEqual([]);
+});
+test('read-only source skips semantic analysis and pending callbacks are safe after destroy',async({page})=>{
+ const source='fn main() -> int { return unknown; }';const errors=await mount(page,{text:source,readOnly:true,provider:'pending'});await page.waitForTimeout(700);await expect(mark(page,'unknown-name')).toHaveCount(0);expect(await page.evaluate(()=>window.fixture.calls)).toBe(0);await page.evaluate(()=>{window.fixture.editor.setReadOnly(false);window.fixture.editor.refreshLive();});await expect.poll(()=>page.evaluate(()=>window.fixture.pending.length)).toBe(1);await page.evaluate(()=>{const f=window.fixture;f.editor.destroy();f.pending[0]({complete:true,hasImports:false,symbols:[],diagnostics:[]});});await page.waitForTimeout(100);expect(errors).toEqual([]);
+});

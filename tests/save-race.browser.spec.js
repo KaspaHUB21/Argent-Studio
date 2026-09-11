@@ -72,3 +72,42 @@ test('rejecting an external modification conflict leaves both versions intact',a
  expect(await page.evaluate(()=>window.__FIXTURE_FILES__[window.__ARGENT_APP__.state.current.path])).toBe('external version');
  expect(await page.evaluate(()=>window.__ARGENT_APP__.state.current.text)).toBe('editor version');await expect(page.locator('.document-tab')).toContainText('*');
 });
+
+test('live completion and quick fixes participate in application save and undo history',async({page})=>{
+ const source='fn update(int amountBalance) -> int {\n    return am\n}\n';
+ await page.evaluate(text=>{const d=window.__ARGENT_APP__.state.current;d.editor.view.dispatch({changes:{from:0,to:d.editor.view.state.doc.length,insert:text}});d.editor.select(text.indexOf('return am')+'return am'.length);},source);
+ await expect(page.locator('.cm-live-ghost')).toHaveText('ountBalance');
+ await page.keyboard.press('Tab');
+ await expect.poll(()=>page.evaluate(()=>window.__ARGENT_APP__.state.current.text)).toBe(source.replace('return am','return amountBalance'));
+ await page.keyboard.press('ControlOrMeta+z');
+ await expect.poll(()=>page.evaluate(()=>window.__ARGENT_APP__.state.current.text)).toBe(source);
+ const invalid='fn update(int value) -> int { return value; }\n]';
+ await page.evaluate(text=>{const d=window.__ARGENT_APP__.state.current;d.editor.view.dispatch({changes:{from:0,to:d.editor.view.state.doc.length,insert:text}});d.editor.focus();},invalid);
+ await page.locator('.cm-live-diagnostic-marker').click();
+ await page.locator('.cm-live-fix').click();
+ await expect.poll(()=>page.evaluate(()=>window.__ARGENT_APP__.state.current.text)).toBe(invalid.slice(0,-1));
+ await page.keyboard.press('ControlOrMeta+z');
+ await expect.poll(()=>page.evaluate(()=>window.__ARGENT_APP__.state.current.text)).toBe(invalid);
+ await page.evaluate(()=>window.__ARGENT_APP__.saveCurrent());
+ expect(await page.evaluate(()=>window.__FIXTURE_FILES__[window.__ARGENT_APP__.state.current.path])).toBe(invalid);
+ await expect(page.locator('.document-tab')).not.toContainText('*');
+});
+
+test('live project checks follow unsaved edits in another open file',async({page})=>{
+ const main='import "./helper.ag";\nfn run() -> int { return helper(true); }';
+ const helper='fn helper(int amount) -> int { return amount; }';
+ await page.evaluate(async({main,helper})=>{
+  const app=window.__ARGENT_APP__,root=app.state.root,entry=app.state.current.path;
+  const original=window.__ARGENT_TEST__.invoke;
+  window.__ARGENT_TEST__.invoke=(command,args)=>command==='read_ai_file'?Promise.resolve(window.__FIXTURE_FILES__[args.projectRoot+'/'+args.path]??null):original(command,args);
+  window.__FIXTURE_FILES__[root+'/helper.ag']=helper;
+  app.context.updateDocument(entry,main);
+  await app.openFile(root+'/helper.ag');await app.openFile(entry);
+ },{main,helper});
+ await expect(page.locator('.document-host:not([hidden]) [data-live-code="type-mismatch"]')).toHaveCount(1);
+ await page.evaluate(()=>{const app=window.__ARGENT_APP__;app.context.updateDocument(app.state.root+'/helper.ag','fn helper(bool amount) -> int { return 1; }');});
+ await expect(page.locator('.document-host:not([hidden]) [data-live-code="type-mismatch"]')).toHaveCount(0);
+ expect(await page.evaluate(()=>window.__FIXTURE_FILES__[window.__ARGENT_APP__.state.root+'/helper.ag'])).toBe(helper);
+ await page.evaluate(helper=>{const app=window.__ARGENT_APP__;app.context.updateDocument(app.state.root+'/helper.ag',helper);},helper);
+ await expect(page.locator('.document-host:not([hidden]) [data-live-code="type-mismatch"]')).toHaveCount(1);
+});

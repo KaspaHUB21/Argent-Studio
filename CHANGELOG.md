@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.45.8
+
+- Add local inline completion, parameter hints, matching-name highlights and sticky block context.
+- Add quiet syntax and semantic checks with explicit corrections and related-definition navigation.
+- Refresh import checks from unsaved changes in other open files.
+- Complete state initializer keys using their declared fields, including redeemed in the ticket example.
+- Preserve indentation when accepting completion suggestions quickly.
+
 ## 0.45.7
 
 - Automatically select the first Argent source in a new project for compilation.
