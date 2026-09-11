@@ -31,7 +31,7 @@ test('Stones graph remains clean through repeated pan and zoom with independent 
  expect(await page.locator('marker path').evaluateAll(es=>es.every(e=>/^#[0-9a-f]{6}$/.test(e.getAttribute('fill'))))).toBe(true);
  await page.getByRole('button',{name:'Schließen',exact:true}).click();await page.evaluate(()=>window.structure.dispose());
 });
-test.use({channel:'msedge',viewport:{width:1200,height:850}});
+test.use({browserName:process.env.ARGENT_BROWSER==='webkit'?'webkit':'chromium',channel:process.env.ARGENT_BROWSER==='webkit'?undefined:'msedge',viewport:{width:1200,height:850}});
 async function drag(page,selector,dx,dy){const b=await page.locator(selector).boundingBox();await page.mouse.move(b.x+b.width/2,b.y+b.height/2);await page.mouse.down();await page.mouse.move(b.x+b.width/2+dx,b.y+b.height/2+dy,{steps:8});await page.mouse.up();}
 test('structure dividers drag both ways and fit a shrinking outer pane',async({page})=>{
  await page.exposeFunction('analyzeStructure',structure);await page.goto(baseUrl);await page.evaluate(async()=>{document.body.innerHTML='<div id="structure-test" style="width:1000px;height:700px"></div>';const css=document.createElement('link');css.rel='stylesheet';css.href='/frontend/structure.css';document.head.append(css);const {mountStructure}=await import('/frontend/structure.js');const doc={path:'C:/fixture/tickets.ag',text:'state S { int count; } actor Ticket owns S { entry redeem() { require(count == 0); } } app Tickets { actor Ticket; }'};window.structure=mountStructure(document.querySelector('#structure-test'),{getDocument:()=>doc,getDocuments:()=>[doc],getSettings:()=>({language:'de'}),invoke:(_command,{request})=>window.analyzeStructure(request)});});await expect(page.locator('.structure-card').first()).toBeVisible();
