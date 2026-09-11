@@ -127,7 +127,7 @@ test('cached analysis resolves a moderate document without cross-function matche
 
 
 test('record keys complete against state fields rather than overlapping local names',()=>{
- const source=fs.readFileSync(new URL('../resources/examples/catalog/tickets/tickets.ag',import.meta.url),'utf8');
+ const source=fs.readFileSync(new URL('../resources/examples/catalog/tickets/tickets.ag',import.meta.url),'utf8').replace(/\r\n/g,'\n');
  const text=source.replace('redeemed: 1,','red');const pos=text.indexOf('            red\n')+'            red'.length;
  assert.equal(liveContext(text,pos).completion?.text,'redeemed');
  const simple='state S { int redeemed; int owner; } actor A owns S { entry redeem() { S redeemed_ticket = { owner: 1, red }; } }';
