@@ -30,4 +30,4 @@ Then run node scripts/update-manifest.mjs. Publish the matching setup.exe, setup
 
 Run the packaged executable with --verify-update --verify-update-report followed by an absolute JSON report path to test the public feed. This mode downloads and verifies the released installer, checks that a corrupted signature is rejected, and exits without installing. It deliberately permits re-verifying the current version only in this explicit diagnostic mode.
 
-This cryptographic update signature does not replace Windows Authenticode signing. Updates are currently enabled only in Windows release builds.
+This cryptographic update signature does not replace Windows Authenticode signing. Updates are enabled in Windows release builds and macOS preview builds. For a combined release, include both Mac app archives and their updater signatures and generate the complete feed as described in [MACOS.md](MACOS.md). Mac preview ZIPs are first-install downloads; they are not Apple-notarized builds.

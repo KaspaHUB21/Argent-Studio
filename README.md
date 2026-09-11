@@ -8,6 +8,10 @@ A Tauri desktop editor for Argent contracts, with a source editor, interactive s
 
 Download the Windows x64 installer from [GitHub Releases](https://github.com/KaspaHUB21/Argent-Studio/releases/latest). No separate JSON files or development tools are needed. Windows installers are currently unsigned; trusted publisher signing is pending certificate provisioning.
 
+## macOS preview download
+
+Download the macOS preview ZIP for Apple Silicon (arm64) or Intel (x64) from [GitHub Releases](https://github.com/KaspaHUB21/Argent-Studio/releases/latest). Extract the ZIP and move **Argent Studio.app** to **Applications**. The compiler, runtime and examples are included. These preview builds are not Developer ID signed or notarized; macOS may block the first launch. See [Apple's instructions](https://support.apple.com/102445) for opening an app you trust. macOS 13.5 or newer is required; automated native validation currently covers macOS 15 on both architectures. First-launch security prompts on a user Mac remain unverified.
+
 ## Features
 
 - Projects, editable examples, named project duplication, and conflict-aware saving.
@@ -42,7 +46,7 @@ node scripts/build-desktop.mjs
 
 Keep the `resources` directory alongside an unpackaged executable. Generated binaries, build outputs, caches, private projects, and user settings are excluded from this repository.
 
-Windows has been exercised during development. macOS support is prepared in the source but has not been verified on a Mac. Signing and notarization are separate distribution steps.
+Windows and macOS 15 (Intel and Apple Silicon) have passed automated native tests. Mac downloads remain previews pending end-user installation validation and Apple signing/notarization.
 
 ## Projects and examples
 
@@ -63,7 +67,7 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml
 pnpm exec playwright test --workers=1
 ```
 
-Browser tests currently use Microsoft Edge. Compiler and transaction integration tests require the native helpers from `build-runtime.mjs`. Tests do not require paid API calls. Test output and screenshots are ignored by Git.
+Browser tests use Microsoft Edge on Windows and WebKit on macOS. Compiler and transaction integration tests require the native helpers from `build-runtime.mjs`. Tests do not require paid API calls. Test output and screenshots are ignored by Git.
 
 ## Repository contents
 
@@ -84,4 +88,4 @@ Release verification and signing requirements are documented in [docs/RELEASE.md
 
 ## Application updates
 
-Windows release builds check for updates at startup. Use **Updates** to check manually. Choose **Later** to dismiss a release, or **Update now** to save pending changes, download and verify the signed installer, and install the update. Version 0.45.1 and earlier require a one-time manual installation of an updater-enabled version. Update signatures are separate from Windows publisher signatures.
+Windows release builds and macOS preview builds check for updates at startup. Use **Updates** to check manually. Choose **Later** to dismiss a release, or **Update now** to save pending changes, download and verify the signed installer, and install the update. Version 0.45.1 and earlier require a one-time manual installation of an updater-enabled version. Update signatures are separate from Windows publisher signatures.

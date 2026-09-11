@@ -1,7 +1,7 @@
 name: macOS compatibility tests
 on:
   push:
-    branches: [test/macos-compatibility, test/macos-diagnostics]
+    branches: [main, test/macos-compatibility, test/macos-diagnostics]
   workflow_dispatch:
 concurrency:
   group: macos-${{ github.workflow }}-${{ github.ref }}
@@ -88,7 +88,10 @@ jobs:
         continue-on-error: true
         run: node scripts/ci-macos-smoke.mjs
       - name: Package test application
-        run: ditto -c -k --sequesterRsrc --keepParent 'src-tauri/target/release/bundle/macos/Argent Studio.app' 'test-output/Argent-Studio-macos-${{ matrix.arch }}-test.zip'
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          ditto -c -k --sequesterRsrc --keepParent 'src-tauri/target/release/bundle/macos/Argent Studio.app' "test-output/Argent-Studio-$VERSION-macos-${{ matrix.arch }}-preview.zip"
+          tar -czf "test-output/Argent-Studio-$VERSION-macos-${{ matrix.arch }}.app.tar.gz" -C src-tauri/target/release/bundle/macos 'Argent Studio.app'
       - name: Prepare isolated update test
         run: node scripts/prepare-macos-update-test.mjs
       - name: Build isolated updater application
@@ -116,6 +119,7 @@ jobs:
             test-output/**/*.json
             test-output/**/*.txt
             test-output/*.zip
+            test-output/*.app.tar.gz
             test-results/
             qa/*.png
           retention-days: 14

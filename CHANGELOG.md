@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.45.6
+
+- Add macOS preview downloads for Apple Silicon and Intel.
+- Enable in-app updates on macOS.
+- Preserve unsaved changes when quitting from the macOS application menu.
+- Support macOS system path aliases while keeping project file access scoped.
+- Preserve files and concurrent edits when moving removed files across Mac volumes.
+
 ## 0.45.5
 
 - Preserve structure block proportions and zoom while resizing the build output and diagram panes.
