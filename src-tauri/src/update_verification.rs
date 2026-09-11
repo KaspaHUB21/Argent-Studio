@@ -4,7 +4,8 @@ use serde_json::json;
 use std::time::Duration;
 
 // Explicit diagnostic mode: verifies the published updater feed and signatures,
-// never calls install and never changes the running application.
+// Production diagnostics never install. The explicit ci-update-test feature
+// can additionally exercise installation in a disposable test application.
 pub fn start(app:&AppHandle){
  let handle=app.clone();
  tauri::async_runtime::spawn(async move{

@@ -1,6 +1,8 @@
 // Translate only application-owned messages. Compiler, OS and service diagnostics
 // must retain their original details (including paths and source excerpts).
 const messages = {
+ 'Unexpected macOS system alias':'Der macOS-Systempfad ist unerwartet verknüpft. Der Zugriff wurde abgebrochen.',
+ 'Trash requires a regular file':'Es können nur reguläre Dateien in den Papierkorb verschoben werden.',
  'Linked project paths are unsupported for AI access':'Die KI darf nicht auf verknüpfte Projektpfade zugreifen.',
  'Project-relative file path required':'Ein Dateipfad innerhalb des Projekts ist erforderlich.',
  'Absolute project root required':'Der Projektordner muss als absoluter Pfad angegeben werden.',

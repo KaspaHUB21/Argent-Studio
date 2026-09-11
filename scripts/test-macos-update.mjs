@@ -15,9 +15,13 @@ run(process.execPath,['node_modules/@tauri-apps/cli/tauri.js','signer','sign','-
 const signature=fs.readFileSync(archive+'.sig','utf8').trim(),platform='darwin-'+(process.arch==='arm64'?'aarch64':'x86_64');
 const manifest={version:'99.0.0',notes:'Isolated update test',pub_date:new Date().toISOString(),platforms:{[platform]:{signature,url:'http://127.0.0.1:17481/update.tar.gz'}}};
 const server=http.createServer((req,res)=>{if(req.url==='/latest.json'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify(manifest));}else if(req.url==='/update.tar.gz'){res.setHeader('Content-Length',fs.statSync(archive).size);fs.createReadStream(archive).pipe(res);}else{res.statusCode=404;res.end();}});
+function runApp(exe,args){return new Promise((resolve,reject)=>{const child=spawn(exe,args,{env:{...process.env,ARGENT_PROJECTS_DIR:path.join(root,'projects')},stdio:'inherit'});const timer=setTimeout(()=>{child.kill();reject(Error('Application test timed out'));},180000);child.once('error',error=>{clearTimeout(timer);reject(error);});child.once('exit',code=>{clearTimeout(timer);resolve(code);});});}
 await new Promise(resolve=>server.listen(17481,'127.0.0.1',resolve));
 try{
  const exe=path.join(installed,'Contents/MacOS/argent-studio-tauri'),report=path.join(root,'verification.json');
+ const ipcReport=path.join(root,'ipc.json');
+ const ipcCode=await runApp(exe,['--ui-smoke','--ui-update-check','--ui-smoke-report',ipcReport]);
+ if(ipcCode!==0||!JSON.parse(fs.readFileSync(ipcReport,'utf8')).updaterIpcChecked)throw Error('Native updater IPC failed');
  const code=await new Promise((resolve,reject)=>{const child=spawn(exe,['--verify-update','--ci-install-update','--verify-update-report',report],{env:{...process.env,ARGENT_PROJECTS_DIR:path.join(root,'projects')},stdio:'inherit'});const timer=setTimeout(()=>{child.kill();reject(Error('Updater timed out'));},180000);child.once('error',reject);child.once('exit',code=>{clearTimeout(timer);resolve(code);});});
  const result=JSON.parse(fs.readFileSync(report,'utf8'));if(code!==0||!result.success||!result.installed||!result.tamperedSignatureRejected)throw Error(JSON.stringify(result));
  if(fs.readFileSync(path.join(installed,marker),'utf8')!=='replacement verified')throw Error('Replacement marker missing');

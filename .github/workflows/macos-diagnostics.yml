@@ -1,7 +1,7 @@
 name: macOS focused diagnostics
 on:
   push:
-    branches: [test/macos-diagnostics]
+    branches: [test/macos-diagnostics, test/macos-filesystem]
 permissions:
   contents: read
 jobs:
@@ -41,7 +41,7 @@ jobs:
           mkdir -p test-output/test-volume
           hdiutil create -size 64m -fs APFS -volname ArgentTestVolume test-output/test-volume.dmg
           hdiutil attach test-output/test-volume.dmg -mountpoint "$PWD/test-output/test-volume" -nobrowse
-          trap 'hdiutil detach "$PWD/test-output/test-volume"' EXIT
+          trap 'hdiutil detach "$PWD/test-output/test-volume" || hdiutil detach -force "$PWD/test-output/test-volume"' EXIT
           ARGENT_TEST_VOLUME="$PWD/test-output/test-volume" node scripts/probe-macos-paths.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()

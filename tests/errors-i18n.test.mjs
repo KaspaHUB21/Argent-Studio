@@ -17,3 +17,9 @@ test('AI scoped-read privacy errors translate in both languages',()=>{
  assert.equal(localizeError(german,'en'),english);
  assert.equal(localizeError('AI access requires a source or build file','de'),'Die KI darf nur auf Quell- oder Build-Dateien zugreifen.');
 });
+
+test('macOS filesystem errors support both language directions',()=>{
+ for(const message of ['Unexpected macOS system alias','Trash requires a regular file']){
+  const german=localizeError(message,'de');assert.notEqual(german,message);assert.equal(localizeError(german,'en'),message);
+ }
+});

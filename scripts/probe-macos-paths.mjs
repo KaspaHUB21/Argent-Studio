@@ -41,6 +41,8 @@ fn main(){
  std::fs::write(&from,"new source").unwrap();assert!(file_move::move_to_trash(&from,&to).is_err());
  assert_eq!(std::fs::read_to_string(&from).unwrap(),"new source");
  assert_eq!(std::fs::read_to_string(&to).unwrap(),"preserve across volumes");
+ let returned=root.join("returned.ag");file_move::move_to_trash(&to,&returned).unwrap();
+ assert!(!to.exists());assert_eq!(std::fs::read_to_string(&returned).unwrap(),"preserve across volumes");
  println!("System aliases, link boundaries, cross-volume trash and collision preservation passed.");
 }
 `);
