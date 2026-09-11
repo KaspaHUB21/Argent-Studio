@@ -2,6 +2,9 @@ name: macOS focused diagnostics
 on:
   push:
     branches: [test/macos-diagnostics, test/macos-filesystem]
+concurrency:
+  group: macos-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:

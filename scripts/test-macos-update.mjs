@@ -22,10 +22,18 @@ try{
  const ipcReport=path.join(root,'ipc.json');
  const ipcCode=await runApp(exe,['--ui-smoke','--ui-update-check','--ui-smoke-report',ipcReport]);
  if(ipcCode!==0||!JSON.parse(fs.readFileSync(ipcReport,'utf8')).updaterIpcChecked)throw Error('Native updater IPC failed');
+ const userFile=path.join(root,'projects/tickets/tickets.ag');fs.appendFileSync(userFile,'\n// preserved through native update\n');
  const code=await new Promise((resolve,reject)=>{const child=spawn(exe,['--verify-update','--ci-install-update','--verify-update-report',report],{env:{...process.env,ARGENT_PROJECTS_DIR:path.join(root,'projects')},stdio:'inherit'});const timer=setTimeout(()=>{child.kill();reject(Error('Updater timed out'));},180000);child.once('error',reject);child.once('exit',code=>{clearTimeout(timer);resolve(code);});});
  const result=JSON.parse(fs.readFileSync(report,'utf8'));if(code!==0||!result.success||!result.installed||!result.tamperedSignatureRejected)throw Error(JSON.stringify(result));
  if(fs.readFileSync(path.join(installed,marker),'utf8')!=='replacement verified')throw Error('Replacement marker missing');
  run(exe,['--ui-smoke','--ui-smoke-report',path.join(root,'relaunch.json')],{env:{...process.env,ARGENT_PROJECTS_DIR:path.join(root,'projects')}});
  if(!JSON.parse(fs.readFileSync(path.join(root,'relaunch.json'),'utf8')).success)throw Error('Updated application did not relaunch');
+ if(!fs.readFileSync(userFile,'utf8').includes('// preserved through native update'))throw Error('Update or relaunch lost user project changes');
+ const exitReport=path.join(root,'exit.json');
+ const exitCode=await runApp(exe,['--ui-smoke','--ui-exit-check','--ui-smoke-report',exitReport]);
+ const exitResult=JSON.parse(fs.readFileSync(exitReport,'utf8'));
+ if(exitCode!==0||!exitResult.exitGuardChecked||!fs.readFileSync(path.join(root,'projects/tickets/tickets.ag'),'utf8').includes('// native quit saved'))throw Error('Native quit confirmation did not preserve and save changes');
+ fs.writeFileSync(exitReport,JSON.stringify({...exitResult,pendingExit:false,savedAndExited:true},null,2));
+ console.log('Native quit cancellation, save and exit passed');
  console.log('Signed download, tamper rejection, in-place replacement and relaunch passed');
 }finally{await new Promise(resolve=>server.close(resolve));}

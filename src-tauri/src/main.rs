@@ -12,6 +12,14 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
 #[derive(Default)]
 struct Operations { cancel: Mutex<Option<Arc<AtomicBool>>>, api: Mutex<HashMap<String,Arc<AtomicBool>>> }
+#[derive(Default)]
+struct ExitGuard { ready: AtomicBool, confirmed: AtomicBool }
+#[tauri::command] fn exit_handler_ready(app:tauri::AppHandle){app.state::<ExitGuard>().ready.store(true,Ordering::SeqCst);}
+#[tauri::command] fn confirm_exit(app:tauri::AppHandle){app.state::<ExitGuard>().confirmed.store(true,Ordering::SeqCst);app.exit(0);}
+#[tauri::command] fn test_request_exit(app:tauri::AppHandle)->Result<(),String>{
+    if !cfg!(feature="ci-update-test")||!std::env::args().any(|a|a=="--ui-exit-check"){return Err("Native exit test disabled".into());}
+    app.exit(0);Ok(())
+}
 fn err(e: impl std::fmt::Display)->String {e.to_string()}
 fn resources(app:&tauri::AppHandle)->PathBuf {
     let packaged=normal_path(app.path().resource_dir().unwrap_or_default().join("resources")); if packaged.join("bin").is_dir(){return packaged;}
@@ -180,7 +188,15 @@ async fn process(app:&tauri::AppHandle,exe:PathBuf,args:Vec<String>,cwd:Option<P
     #[cfg(target_os="linux")] {std::process::Command::new("xdg-open").arg(&url).spawn().map_err(err)?;}
     Ok(())
 }
-fn main(){tauri::Builder::default().manage(Operations::default()).plugin(tauri_plugin_dialog::init()).on_page_load(|webview,payload| { if std::env::args().any(|a|a=="--ui-smoke") && matches!(payload.event(),tauri::webview::PageLoadEvent::Finished) { #[cfg(feature="ci-update-test")] if std::env::args().any(|a|a=="--ui-update-check"){let _=webview.eval("window.__ARGENT_NATIVE_UPDATE_TEST__=true;");} let _=webview.eval(UI_SMOKE_SCRIPT); } }).setup(|app| { #[cfg(any(windows, target_os="macos"))] app.handle().plugin(tauri_plugin_updater::Builder::new().build())?; #[cfg(any(windows, target_os="macos"))] if std::env::args().any(|a|a=="--verify-update"){if let Some(window)=app.get_webview_window("main"){let _=window.hide();}update_verification::start(app.handle());} if std::env::args().any(|a|a=="--ui-smoke") { let handle=app.handle().clone(); tauri::async_runtime::spawn(async move {tokio::time::sleep(Duration::from_secs(60)).await;let _=record_ui_smoke(handle,json!({"success":false,"error":"Native UI smoke exceeded 60 seconds; page/IPC initialization did not finish"}));}); } if std::env::args().any(|a|a=="--smoke-test") { if let Some(window)=app.get_webview_window("main"){let _=window.hide();} let handle=app.handle().clone(); tauri::async_runtime::spawn(async move {let result=native_smoke(handle.clone()).await;let ok=result.is_ok();let report=match result{Ok(v)=>v,Err(e)=>json!({"success":false,"error":e})};let args:Vec<String>=std::env::args().collect();let target=args.iter().position(|a|a=="--smoke-report").and_then(|i|args.get(i+1)).map(PathBuf::from).unwrap_or_else(||std::env::temp_dir().join("argent-studio/native-smoke.json"));if write_allowed(&target).is_ok(){if let Some(parent)=target.parent(){let _=std::fs::create_dir_all(parent);}let _=std::fs::write(target,serde_json::to_vec_pretty(&report).unwrap_or_default());}handle.exit(if ok{0}else{1});}); } Ok(()) }).invoke_handler(tauri::generate_handler![app_info,list_directory,read_file,read_ai_file,write_file,create_directory,load_settings,save_settings,set_secret,build,inspect,cancel_operation,language_request,run_scenario,run_scenario_json,api_request,cancel_api,list_examples,open_example,duplicate_project,cleanup_builds,clone_example,trash_file,create_file,read_reference,toolchain_status,toolchain_verify,toolchain_updates,open_external,record_ui_smoke]).run(tauri::generate_context!()).expect("Unable to start Argent Studio");}
+fn main(){tauri::Builder::default().manage(Operations::default()).manage(ExitGuard::default()).plugin(tauri_plugin_dialog::init()).on_page_load(|webview,payload| { if std::env::args().any(|a|a=="--ui-smoke") && matches!(payload.event(),tauri::webview::PageLoadEvent::Finished) { #[cfg(feature="ci-update-test")] if std::env::args().any(|a|a=="--ui-update-check"){let _=webview.eval("window.__ARGENT_NATIVE_UPDATE_TEST__=true;");} #[cfg(feature="ci-update-test")] if std::env::args().any(|a|a=="--ui-exit-check"){let _=webview.eval("window.__ARGENT_NATIVE_EXIT_TEST__=true;");} let _=webview.eval(UI_SMOKE_SCRIPT); } }).setup(|app| { #[cfg(any(windows, target_os="macos"))] app.handle().plugin(tauri_plugin_updater::Builder::new().build())?; #[cfg(any(windows, target_os="macos"))] if std::env::args().any(|a|a=="--verify-update"){if let Some(window)=app.get_webview_window("main"){let _=window.hide();}update_verification::start(app.handle());} if std::env::args().any(|a|a=="--ui-smoke") { let handle=app.handle().clone(); tauri::async_runtime::spawn(async move {tokio::time::sleep(Duration::from_secs(60)).await;let _=record_ui_smoke(handle,json!({"success":false,"error":"Native UI smoke exceeded 60 seconds; page/IPC initialization did not finish"}));}); } if std::env::args().any(|a|a=="--smoke-test") { if let Some(window)=app.get_webview_window("main"){let _=window.hide();} let handle=app.handle().clone(); tauri::async_runtime::spawn(async move {let result=native_smoke(handle.clone()).await;let ok=result.is_ok();let report=match result{Ok(v)=>v,Err(e)=>json!({"success":false,"error":e})};let args:Vec<String>=std::env::args().collect();let target=args.iter().position(|a|a=="--smoke-report").and_then(|i|args.get(i+1)).map(PathBuf::from).unwrap_or_else(||std::env::temp_dir().join("argent-studio/native-smoke.json"));if write_allowed(&target).is_ok(){if let Some(parent)=target.parent(){let _=std::fs::create_dir_all(parent);}let _=std::fs::write(target,serde_json::to_vec_pretty(&report).unwrap_or_default());}handle.exit(if ok{0}else{1});}); } Ok(()) }).invoke_handler(tauri::generate_handler![app_info,list_directory,read_file,read_ai_file,write_file,create_directory,load_settings,save_settings,set_secret,build,inspect,cancel_operation,language_request,run_scenario,run_scenario_json,api_request,cancel_api,list_examples,open_example,duplicate_project,cleanup_builds,clone_example,trash_file,create_file,read_reference,toolchain_status,toolchain_verify,toolchain_updates,open_external,record_ui_smoke,exit_handler_ready,confirm_exit,test_request_exit]).build(tauri::generate_context!()).expect("Unable to start Argent Studio").run(|_app,_event| {
+    #[cfg(target_os="macos")]
+    if let tauri::RunEvent::ExitRequested{api,..}=_event {
+        let guard=_app.state::<ExitGuard>();
+        let diagnostic=std::env::args().any(|a|matches!(a.as_str(),"--ui-smoke"|"--smoke-test"|"--verify-update"));
+        let test_exit=cfg!(feature="ci-update-test")&&std::env::args().any(|a|a=="--ui-exit-check");
+        if (!diagnostic||test_exit)&&guard.ready.load(Ordering::SeqCst)&&!guard.confirmed.load(Ordering::SeqCst)&&!_app.webview_windows().is_empty(){api.prevent_exit();let _=_app.emit("exit-requested",());}
+    }
+});}
 
 
 #[cfg(test)]
@@ -302,7 +318,8 @@ fn normal_path(path:PathBuf)->PathBuf {
 #[tauri::command] fn record_ui_smoke(app:tauri::AppHandle,report:Value)->Result<(),String>{
     if !std::env::args().any(|a|a=="--ui-smoke"){return Err("UI smoke reporting disabled in normal application mode".into());}
     let args:Vec<String>=std::env::args().collect();let target=args.iter().position(|a|a=="--ui-smoke-report").and_then(|i|args.get(i+1)).map(PathBuf::from).unwrap_or_else(||std::env::temp_dir().join("argent-studio/native-ui-smoke.json"));
-    write_allowed(&target)?;if let Some(parent)=target.parent(){std::fs::create_dir_all(parent).map_err(err)?;}atomic_write(&target,&serde_json::to_vec_pretty(&report).map_err(err)?)?;app.exit(if report["success"]==true{0}else{1});Ok(())
+    write_allowed(&target)?;if let Some(parent)=target.parent(){std::fs::create_dir_all(parent).map_err(err)?;}atomic_write(&target,&serde_json::to_vec_pretty(&report).map_err(err)?)?;if cfg!(feature="ci-update-test")&&args.iter().any(|a|a=="--ui-exit-check")&&report["pendingExit"]==true{return Ok(());}
+    app.state::<ExitGuard>().confirmed.store(true,Ordering::SeqCst);app.exit(if report["success"]==true{0}else{1});Ok(())
 }
 const UI_SMOKE_SCRIPT:&str=r#"
 (async()=>{
@@ -318,6 +335,17 @@ const UI_SMOKE_SCRIPT:&str=r#"
   app.setView('structure');await wait(()=>document.querySelectorAll('.structure-card').length>0,'Structure cards did not render');
   let updaterIpcChecked=false;if(window.__ARGENT_NATIVE_UPDATE_TEST__){const update=await invoke("plugin:updater|check",{timeout:10000});if(update?.version!=="99.0.0")throw Error("Native updater IPC returned no test update");updaterIpcChecked=true;}
   const report={success:true,updaterIpcChecked,url:location.href,document:current.path,editorPresent:true,buildSuccess:result.success,buildOutput:result.output,artifactFiles:result.files.length,structureCards:document.querySelectorAll('.structure-card').length,status:document.querySelector('#status')?.textContent,errors};
+  if(errors.length)throw Error(errors.join("; "));
+  if(window.__ARGENT_NATIVE_EXIT_TEST__){
+   current.editor.view.dispatch({changes:{from:current.editor.view.state.doc.length,insert:"\n// native quit saved"}});
+   await invoke("test_request_exit");await wait(()=>document.querySelector('dialog'),'Quit did not request confirmation');
+   const button=labels=>[...document.querySelectorAll('dialog button')].find(b=>labels.includes(b.textContent));
+   button(['Abbrechen','Cancel']).click();await wait(()=>!document.querySelector('dialog'),'Quit cancellation did not close confirmation');
+   if(!current.text.includes('// native quit saved')||current.text===current.diskText)throw Error('Quit cancellation lost unsaved changes');
+   await invoke('record_ui_smoke',{report:{...report,exitGuardChecked:true,pendingExit:true}});
+   await invoke("test_request_exit");await wait(()=>document.querySelector('dialog'),'Second quit did not request confirmation');
+   button(['Speichern','Save']).click();return;
+  }
   if(errors.length)throw Error(errors.join('; '));await invoke('record_ui_smoke',{report});
  }catch(error){await invoke('record_ui_smoke',{report:{success:false,error:String(error.stack||error),url:location.href,status:document.querySelector('#status')?.textContent,errors}});}
 })();

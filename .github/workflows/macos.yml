@@ -3,6 +3,9 @@ on:
   push:
     branches: [test/macos-compatibility, test/macos-diagnostics]
   workflow_dispatch:
+concurrency:
+  group: macos-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
