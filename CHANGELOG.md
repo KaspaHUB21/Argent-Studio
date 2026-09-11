@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.45.7
+
+- Automatically select the first Argent source in a new project for compilation.
+- Ask for a build entry when opening a project with multiple sources and no saved selection.
+- Remember the build entry and application name per project, including moved and duplicated projects.
+- Keep the project build entry when switching editor tabs.
+
 ## 0.45.6
 
 - Add macOS preview downloads for Apple Silicon and Intel.

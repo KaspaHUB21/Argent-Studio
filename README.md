@@ -52,6 +52,8 @@ Windows and macOS 15 (Intel and Apple Silicon) have passed automated native test
 
 Development projects use the local `projects` directory. Portable Windows builds use a `projects` directory beside the launcher or executable. macOS bundles use `Documents/Argent Studio/projects`. Set `ARGENT_PROJECTS_DIR` to an absolute directory to override this location.
 
+Compilation uses the current project's build entry. A single Argent source is selected automatically; projects with multiple sources and no saved selection show a chooser. The selected relative path and optional application name are stored in `.argent-studio.json` on compilation or when explicitly selecting an entry. This hidden project file travels with copied or moved projects. Editor tab changes do not change the build entry.
+
 The four examples are seeded from `resources/examples/catalog` without overwriting existing projects. Reopening an example reuses its existing folder. Use **Duplicate project** to create a separately named copy. Generated files belong in each project's `build` directory and are available from **Generated files**. Opening a project clears the previous project's output and errors and shows files from the newest saved build, if present. Saved builds are for inspection; test transactions compile current sources again. Keep recent builds and use the build cleanup action when needed.
 
 ## Continuous integration
