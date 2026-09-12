@@ -1,6 +1,20 @@
 // Translate only application-owned messages. Compiler, OS and service diagnostics
 // must retain their original details (including paths and source excerpts).
 const messages = {
+ 'Window connection closed':'Die Verbindung zum Strukturfenster wurde geschlossen.',
+ 'Window did not respond':'Das Strukturfenster antwortet nicht. Bitte das Fenster prüfen.',
+ 'Concurrent edit conflict':'Die Datei wurde gleichzeitig im anderen Fenster bearbeitet.',
+ 'Document is not editable':'Die Datei kann nicht bearbeitet werden.',
+ 'Project is busy':'Bitte den laufenden Vorgang zuerst abschließen.',
+ 'Popup blocked':'Das zusätzliche Fenster wurde blockiert.',
+ 'Window creation timed out':'Das zusätzliche Fenster konnte nicht rechtzeitig geöffnet werden.',
+ 'Structure window did not initialize':'Das Strukturfenster konnte nicht initialisiert werden.',
+ 'Resolve the conflict in the structure window first':'Bitte zuerst den Bearbeitungskonflikt im Strukturfenster lösen.',
+ 'Structure session ended':'Die ausgelagerte Strukturansicht wurde beendet.',
+ 'Invalid document text':'Der Dokumentinhalt ist ungültig.',
+ 'Unsupported structure action':'Diese Aktion wird im Strukturfenster nicht unterstützt.',
+ 'Unsupported structure request':'Diese Anfrage wird im Strukturfenster nicht unterstützt.',
+
  'Unexpected macOS system alias':'Der macOS-Systempfad ist unerwartet verknüpft. Der Zugriff wurde abgebrochen.',
  'Trash requires a regular file':'Es können nur reguläre Dateien in den Papierkorb verschoben werden.',
  'Linked project paths are unsupported for AI access':'Die KI darf nicht auf verknüpfte Projektpfade zugreifen.',

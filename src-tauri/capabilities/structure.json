@@ -1,0 +1,13 @@
+{
+  "identifier": "structure",
+  "description": "Detached local structure window navigation and docking",
+  "windows": [
+    "structure"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-destroy",
+    "core:window:allow-set-title"
+  ]
+}

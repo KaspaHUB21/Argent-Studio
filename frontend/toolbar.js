@@ -44,7 +44,7 @@ export function organizeToolbar(toolbar, buildbar, views, language) {
   const panels = document.createElement('div'); panels.className = 'view-panels';
   panels.append(find('panel-project'), find('panel-results'), find('panel-assistant'));
   text(find('help'), 'Dokumentation', 'Documentation');
-  menu('help', 'Hilfe', 'Help', ['help', 'check-updates']);
+  menu('help', 'Hilfe', 'Help', ['help', 'check-updates', 'app-version']);
   const primary = document.createElement('div'); primary.className = 'primary-actions';
   primary.append(find('save'), find('compile'), find('cancel'), find('settings'));
   toolbar.append(nav, primary);

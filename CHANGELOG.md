@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.45.10
+
+- Add a code font size slider to text and structure editors, with a shared saved zoom level and one-click reset.
+- Show the installed application version in Help below Updates.
+- Open the structure view in a separate window and dock it back into the workspace.
+- Synchronize source edits between windows and preserve drafts when concurrent edits conflict.
+- Preserve structure selection, expanded blocks and diagram position when docking.
+- Keep workspace resize handles accessible beside editor controls.
+- Slightly round the corners of structure blocks.
+
 ## 0.45.9
 
 - Indent new lines inside blocks, calls and arrays automatically.
