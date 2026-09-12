@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.45.12
+
+- Make structure block labels larger and fit them to the available space, wrapping longer labels and conditions.
+- Keep imported source edits in the structure editor without opening an extra visible code editor.
+- Preserve the original undo baseline and refresh structure code correctly after undo and redo, including detached windows.
+
 ## 0.45.11
 
 - Float the code font slider inside the editor at the bottom right without a separate toolbar row.
