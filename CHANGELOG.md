@@ -2,6 +2,9 @@
 
 ## 0.45.11
 
+- Float the code font slider inside the editor at the bottom right without a separate toolbar row.
+- Remove the idle connection hint and shared-definition notice above the structure code editor.
+
 - Replace the structure overview with a source-derived rule network: inputs on the left, rules in the middle, outputs on the right.
 - Expand and collapse App, Actor, action and rule groups with a double-click while preserving source order and nested expansion state.
 - Route colored value connections around blocks; highlight related connections on block hover and show line details on hover.

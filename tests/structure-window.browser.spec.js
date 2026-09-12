@@ -34,7 +34,7 @@ for(const language of ['en','de'])test('version, shared font zoom and detached e
  await expect(page.locator('.brand-identity #app-version')).toHaveCount(0);
  await page.locator('#menu-help > summary').click();await expect(page.locator('#menu-help #app-version')).toBeVisible();
  await expect(page.locator('#check-updates + #app-version')).toHaveCount(1);await page.locator('#menu-help > summary').click();
- await page.locator('.code-host .editor-zoom-controls input').fill('140');
+ await expect(page.locator('.code-host .cm-panels-bottom')).toHaveCSS('position','absolute');await page.locator('.code-host .editor-zoom-controls input').fill('140');
  await expect.poll(()=>page.locator('.code-host .cm-scroller').evaluate(e=>parseFloat(getComputedStyle(e).fontSize))).toBeCloseTo(19.6,3);
  expect(await page.evaluate(()=>__SAVED_SETTINGS__.editorZoom)).toBe(140);
  const popup=await detach(page);

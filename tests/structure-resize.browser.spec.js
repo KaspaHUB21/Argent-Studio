@@ -62,15 +62,15 @@ test('all source connections are visible and language changes preserve Unicode s
  },fixturePath);
  const edges=page.locator('.structure-edge');await expect(edges).toHaveCount(3);
  await expect(page.locator('.structure-filters')).toHaveCount(0);
- await expect(page.locator('.structure-section')).toHaveAttribute('title',fixturePath);
+ await expect(page.locator('.structure-section')).toHaveCount(0);expect(await page.evaluate(()=>structure.getSelected().path)).toBe(fixturePath);
  expect((await page.locator('.structure-card title').allTextContents()).some(text=>text.includes(fixturePath))).toBe(false);
  const value=page.locator('.structure-edge[data-kind="value"] .structure-edge-hit');await value.dispatchEvent('pointerenter');await value.dispatchEvent('click');await expect(page.locator('.structure-edge-info')).toContainText('Datentyp: int');
  await page.evaluate(()=>{settings.language='en';structure.refreshSettings();});
  await expect(page.getByRole('separator',{name:'Resize structure tree and diagram',exact:true})).toHaveAttribute('title','Resize structure tree and diagram');
  await expect(page.getByRole('textbox',{name:'Filter blocks',exact:true})).toBeVisible();
  await expect(page.locator('.structure-edge-info')).toContainText('Data type: int');
- await expect(page.locator('.structure-section')).toHaveText('Shared definition · Prüfung.ag · Changes appear in every reference · Ctrl+S saves');
- await expect(page.locator('.structure-section')).toHaveAttribute('title',fixturePath);
+ await expect(page.locator('.structure-section')).toHaveCount(0);
+ await expect(page.locator('.structure-section')).toHaveCount(0);expect(await page.evaluate(()=>structure.getSelected().path)).toBe(fixturePath);
  await expect(page.locator('.structure-tree-row').filter({hasText:'Field · Prüfung'})).toHaveCount(1);
  await page.evaluate(()=>{settings.language='de';structure.refreshSettings();});
  await expect(page.getByRole('separator',{name:'Strukturbaum und Diagramm aufteilen',exact:true})).toHaveAttribute('title','Strukturbaum und Diagramm aufteilen');

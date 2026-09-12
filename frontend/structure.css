@@ -36,3 +36,7 @@
 
 :root[data-theme=light] .structure-group-envelope{fill:#4090dd09;stroke:#4779a8}
 .has-highlight .structure-edge:not(.highlighted){filter:grayscale(1)}
+
+.structure-edge-info:empty{display:none}
+
+.structure-graph{position:relative}.structure-graph>.structure-edge-info{position:absolute;bottom:8px;left:8px;max-width:calc(100% - 16px);max-height:45%;overflow:auto;pointer-events:none;z-index:2;background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:6px 10px}
