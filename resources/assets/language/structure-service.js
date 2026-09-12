@@ -172,7 +172,9 @@ function structure(request) {
   edges.forEach(e => { e.from = stable.get(e.from); e.to = stable.get(e.to); });
   nodes.forEach(n => { const id = stable.get(n.id); n.parent = stable.get(n.parent) || ''; n.id = id; });
   const result = { nodes, edges, sources: [...files.values()].map(s => ({ path: s.path, text: s.source })), warning: [...new Set(warnings)].join(' · '), warningEn: [...new Set(warningsEn)].join(' · ') };
-  result.presentation = require('./structure-projection').project(result);
+  result.flow = require('./structure-flow').projectFlow(result, [...files.values()]);
+  result.warning = [result.warning, result.flow.warning].filter(Boolean).join(' · ');
+  result.warningEn = [result.warningEn, result.flow.warningEn].filter(Boolean).join(' · ');
   return result;
 }
 module.exports = { structure };

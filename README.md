@@ -93,3 +93,9 @@ Release verification and signing requirements are documented in [docs/RELEASE.md
 ## Application updates
 
 Windows release builds and macOS preview builds check for updates at startup. Use **Updates** to check manually. Choose **Later** to dismiss a release, or **Update now** to save pending changes, download and verify the signed installer, and install the update. Version 0.45.1 and earlier require a one-time manual installation of an updater-enabled version. Update signatures are separate from Windows publisher signatures.
+
+## Rule network
+
+The structure view places inputs on the left, rules and calculations in the middle, and outputs on the right. Double-click an App, Actor, action or rule group to expand or collapse it. Click a node to edit its source below. Value colors follow their origins; dashed lines indicate control flow and dotted lines indicate membership. Hover a node to emphasize connected lines, or hover a line for source, destination and available type information. Expanded group boundaries stay visible.
+
+The network follows the analyzed source and is not a transaction simulation. Unsupported or incomplete syntax produces analysis warnings; the graph does not prove contract correctness. Function bodies across call boundaries are not fully expanded. Diagram zoom is separate from the saved code-font zoom. Open the structure in a separate window using the window control or the structure toolbar; docking preserves selection, expanded groups and view position.

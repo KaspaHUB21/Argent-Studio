@@ -13,19 +13,24 @@ test('record writes are distinct from field reads in every projected alias', () 
   assert.ok(!result.edges.some(e => e.from === check.id && e.label === 'setzt Feld'));
   for (const label of ['liest Feld', 'setzt Feld']) {
     assert.ok(result.edges.some(e => e.from === assign.id && e.to === field.id && e.label === label));
-    assert.ok(result.presentation.edges.some(e => e.label === label));
+
   }
+  const input = result.flow.nodes.find(n => n.definitionId === field.id && result.flow.nodes.some(a => a.id === n.parent && a.kind === 'entry'));
+  const member = result.flow.nodes.find(n => n.parent === assign.id);
+  assert.ok(result.flow.edges.some(e => e.kind === 'value' && e.from === input.id && e.to === check.id));
+  assert.ok(result.flow.edges.some(e => e.kind === 'value' && e.from === input.id && e.to === member.id));
+  assert.ok(result.flow.edges.some(e => e.kind === 'value' && e.from === member.id && e.to === assign.id && e.valueName === 'updated.value'));
 });
 function model(text, documents = []) { return structure({ path: path.resolve('test-output/structure/main.ag'), text, documents }); }
 test('tickets have exact editable source ranges and the intended relationships', () => {
   const text = fs.readFileSync(path.resolve(__dirname, '../../examples/catalog/tickets/tickets.ag'), 'utf8');
   const result = model(text);
-  const view = result.presentation;
+  const view = result.flow;
   const issuerView = view.nodes.find(n => n.kind === 'actor' && n.name === 'Issuer');
   const stateView = view.nodes.find(n => n.kind === 'state' && n.name === 'IssuerState');
   assert.equal(stateView.parent, issuerView.id);
   assert.ok(!view.nodes.some(n => n.kind === 'group' && n.name === 'Gespeicherter Zustand'));
-  assert.deepEqual(view.edges.filter(e => e.from === issuerView.id && e.to === stateView.id).map(e => e.label), ['verwendet Zustand']);
+  assert.deepEqual(view.edges.filter(e => e.from === issuerView.id && e.to === stateView.id).map(e => e.label), ['enthält']);
   for (const n of result.nodes) assert.equal(n.text, text.slice(n.start, n.end), n.name);
   const find = (kind, name) => result.nodes.find(n => n.kind === kind && n.name === name);
   const issuer = find('actor', 'Issuer'), ticket = find('actor', 'Ticket'), state = find('state', 'IssuerState');
@@ -68,24 +73,24 @@ test('unfinished actor body remains represented for editing', () => {
   assert.ok(result.nodes.some(n => n.kind === 'check'));
   assert.ok(result.nodes.every(n => n.end >= n.start));
 });
-test('semantic tree order and identities survive moving all top-level declarations', () => {
+test('semantic flow navigation and identities survive moving all top-level declarations', () => {
   const text = fs.readFileSync(path.resolve(__dirname, '../../examples/catalog/tickets/tickets.ag'), 'utf8');
   const first = model(text);
   const declarations = first.nodes.filter(n => ['app', 'actor', 'state'].includes(n.kind));
   const second = model(declarations.reverse().map(n => n.text).join('\n\n'));
-  const shape = m => m.presentation.nodes.map(n => [n.id, n.parent, n.kind, n.name]);
+  const shape = m => m.flow.nodes.map(n => [n.id, n.parent, n.kind, n.name]);
   assert.deepEqual(shape(first), shape(second));
-  assert.equal(first.presentation.nodes[0].kind, 'app');
-  assert.ok(!first.presentation.nodes.some(n => n.kind === 'file'));
+  assert.equal(first.flow.nodes[0].kind, 'app');
+  assert.ok(!first.flow.nodes.some(n => n.kind === 'file'));
 });
 test('one field appears under several actions with the same source identity and exact range', () => {
   const result = model('state S { int count; } actor C owns S { entry b() { require(count == 2); } entry a() { require(count == 1); } } app A { actor C; }');
   const source = result.nodes.find(n => n.kind === 'field');
-  const aliases = result.presentation.nodes.filter(n => n.definitionId === source.id);
+  const aliases = result.flow.nodes.filter(n => n.definitionId === source.id);
   assert.equal(aliases.length, 3); // two actions and stored state
   assert.equal(new Set(aliases.map(n => n.id)).size, 3);
   assert.ok(aliases.every(n => n.text === 'int count;' && n.start === source.start));
-  assert.deepEqual(result.presentation.nodes.filter(n => n.kind === 'entry').map(n => n.name), ['a', 'b']);
+  assert.deepEqual(result.flow.nodes.filter(n => n.kind === 'entry').map(n => n.name), ['a', 'b']);
 });
 test('field references distinguish record labels, local shadowing, parameters and unrelated states', () => {
   const text = 'state S { int count; } state T { int count; } actor C owns S { entry a(int amount) { require(count == amount); S next = { count: count + 1, }; { int count = 4; require(count == 4); } require(count > 0); } entry b(int count) { require(count > 1); } } app A { actor C; }';

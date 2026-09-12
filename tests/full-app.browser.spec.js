@@ -163,7 +163,7 @@ test('expanded structure cards retain their proportions and zoom when resizing b
    if(command==='language_request') {
     const doc=window.__ARGENT_APP__.state.current;
     const nodes=[{id:'app',kind:'app',name:'Tickets'},{id:'actor',parent:'app',kind:'actor',name:'Ticket'},{id:'entry',parent:'actor',kind:'entry',name:'redeem'}].map(n=>({...n,path:doc.path,start:0,end:doc.text.length,text:doc.text,detail:n.name}));
-    return {nodes,edges:[{from:'app',to:'actor',label:'enthält'},{from:'actor',to:'entry',label:'enthält'}],sources:[doc]};
+    return {nodes,edges:[],flow:{nodes:nodes.map(n=>({...n,role:'scope',sourceId:n.id})),edges:[{from:'app',to:'actor',kind:'contains',label:'enthält'},{from:'actor',to:'entry',kind:'contains',label:'enthält'}]},sources:[doc]};
    }
    return previous(command,args);
   };

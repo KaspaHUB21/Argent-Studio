@@ -21,7 +21,7 @@ async function mount(page,language='en'){
    if(command==='language_request'){
     const r=a.request;if(r.mode!=='structure')return {items:[]};if(window.__REAL_STRUCTURE__)return window.__REAL_STRUCTURE__(r);
     const n={id:'sample',kind:'app',name:'Sample',detail:'app Sample',path:r.path,text:r.text,start:0,end:r.text.length,editable:true};
-    return {nodes:[n],edges:[],sources:r.documents};
+    return {nodes:[n],edges:[],flow:{nodes:[{...n,role:'scope'}],edges:[]},sources:r.documents};
    }
    throw Error('Unexpected fixture command: '+command);
   }};
@@ -78,12 +78,12 @@ test('settings font size, diagram position and repeated docking are retained',as
  await page.locator('#settings-editor-zoom').fill('160');await page.getByRole('dialog').getByRole('button',{name:'Save',exact:true}).click();
  await expect(page.locator('.code-host .editor-zoom-controls input')).toHaveValue('160');
  await page.locator('#view-structure').click();await expect(page.locator('.structure-card')).toHaveCount(1);
- const view={selected:'sample',collapsed:['sample'],overview:true,selectionOnly:true,scale:1.4,pan:{x:31,y:17},enabled:['contains'],sidebarWidth:180,graphFraction:.6,search:''};
+ const view={selected:'sample',collapsed:['sample'],focusId:'*',scale:1.4,pan:{x:31,y:17},sidebarWidth:180,graphFraction:.6,search:''};
  await page.evaluate(view=>__ARGENT_APP__.state.current.structure.restoreViewState(view),view);
  for(let n=0;n<2;n++){
   const popup=await detach(page);
   await expect.poll(()=>popup.evaluate(()=>__ARGENT_DETACHED__.structure.getViewState().pan)).toEqual(view.pan);
-  await expect.poll(()=>popup.evaluate(()=>__ARGENT_DETACHED__.structure.getViewState().enabled)).toEqual(['contains']);
+  await expect.poll(()=>popup.evaluate(()=>__ARGENT_DETACHED__.structure.getViewState().focusId)).toEqual('*');
   await page.locator('.structure-detached-placeholder button').last().click();await expect.poll(()=>popup.isClosed()).toBe(true);
   const actual=await page.evaluate(()=>__ARGENT_APP__.state.current.structure.getViewState());expect(actual.pan).toEqual(view.pan);expect(actual.collapsed).toEqual(view.collapsed);
  }

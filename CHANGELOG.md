@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.45.11
+
+- Replace the structure overview with a source-derived rule network: inputs on the left, rules in the middle, outputs on the right.
+- Expand and collapse App, Actor, action and rule groups with a double-click while preserving source order and nested expansion state.
+- Route colored value connections around blocks; highlight related connections on block hover and show line details on hover.
+- Show source conditions instead of numbered check labels, omit file paths from block tooltips and strengthen expanded group outlines.
+- Keep code editing, shared font zoom and detached structure windows integrated with the new graph in German and English.
 ## 0.45.10
 
 - Add a code font size slider to text and structure editors, with a shared saved zoom level and one-click reset.
