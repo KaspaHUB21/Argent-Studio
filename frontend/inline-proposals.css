@@ -1,0 +1,24 @@
+.cm-ai-change { background: rgba(224,166,46,.13); border-left: 3px solid #ba7900; }
+.cm-ai-gutter .cm-gutterElement { padding: 0 3px; }
+.cm-ai-marker { border: 0; background: transparent; color: #a36300; padding: 0 2px; cursor: pointer; font-size: 12px; line-height: inherit; }
+.cm-ai-marker:focus-visible { outline: 2px solid #2781da; }
+.cm-ai-tooltip { max-width: min(700px,85vw); max-height: 65vh; overflow: auto; padding: 12px; background: #fff; color: #192733; font: 13px system-ui,sans-serif; }
+.cm-ai-tooltip-dark { background: #202731; color: #dce4f0; }
+.cm-ai-tooltip h4 { margin: 0 0 8px; }
+.cm-ai-tooltip .cm-ai-comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cm-ai-tooltip pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0 8px; padding: 8px; border: 1px solid #8493a666; font: 12px Consolas,monospace; max-height: 32vh; overflow: auto; }
+.cm-ai-before pre { background: #de555516; }
+.cm-ai-after pre { background: #38b76c16; }
+.cm-ai-tooltip p { margin: 8px 0; }
+.cm-ai-tooltip button { margin: 4px 8px 0 0; }
+
+.cm-ai-tooltip { border-radius: 6px; box-shadow: 0 4px 18px #0003; }
+.cm-ai-tooltip button { padding: 5px 9px; border: 1px solid #8997a7; border-radius: 4px; background: #f4f7fc; color: #192733; cursor: pointer; }
+.cm-ai-tooltip button:disabled { opacity: .55; cursor: default; }
+.cm-ai-tooltip button:focus-visible { outline: 2px solid #2781da; outline-offset: 2px; }
+.cm-ai-tooltip-dark button { background: #303c4b; color: #dce4f0; border-color: #64748a; }
+
+.cm-ai-review { background: rgba(42,132,205,.12); border-left: 3px solid #2a84cd; }
+.cm-ai-review.cm-ai-change { background: rgba(224,166,46,.13); border-left-color: #ba7900; }
+.cm-ai-review-gutter .cm-gutterElement { padding: 0 3px; }
+.cm-ai-review-marker { color: #2477bc; }

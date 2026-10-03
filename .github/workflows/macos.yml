@@ -2,6 +2,7 @@ name: macOS compatibility tests
 on:
   push:
     branches: [main, test/macos-compatibility, test/macos-diagnostics]
+  pull_request:
   workflow_dispatch:
 concurrency:
   group: macos-${{ github.workflow }}-${{ github.ref }}
@@ -49,7 +50,7 @@ jobs:
             .cargo/git
             .runtime-target
             src-tauri/target
-          key: macos-v2-${{ matrix.arch }}-rust194-${{ hashFiles('src-tauri/Cargo.lock', 'resources/toolchains/argent-master/Cargo.lock') }}
+          key: macos-v3-${{ matrix.arch }}-rust194-${{ hashFiles('src-tauri/Cargo.lock', 'resources/toolchains/argent-master/Cargo.lock', 'scripts/configure-build.mjs', 'resources/toolchains/argent-provenance.json') }}
           restore-keys: |
             macos-v2-${{ matrix.arch }}-rust194-
             macos-${{ matrix.arch }}-rust194-
@@ -118,6 +119,7 @@ jobs:
           path: |
             test-output/**/*.json
             test-output/**/*.txt
+            resources/bin/toolchain-build.json
             test-output/*.zip
             test-output/*.app.tar.gz
             test-results/

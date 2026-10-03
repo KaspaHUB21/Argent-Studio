@@ -73,6 +73,8 @@ contract Asset(
         require(OpAuthOutputCount(this.activeInputIndex) == 1);
         // :: output merged: Asset
         int gen__merged_output_idx = OpAuthOutputIdx(this.activeInputIndex, 0);
+        // :: leader authorizes all covenant continuations (rule 5)
+        require(OpCovOutputCount(gen__cov_id) == OpAuthOutputCount(this.activeInputIndex));
 
         require(checkSig(s, p));
         State next_state = State {

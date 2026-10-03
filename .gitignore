@@ -30,3 +30,4 @@ resources/bin/runtime/*
 *.key
 .DS_Store
 Thumbs.db
+.desktop-update-target/

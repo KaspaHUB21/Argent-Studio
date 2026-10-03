@@ -55,6 +55,8 @@ contract Launcher(
         require(OpAuthOutputCount(this.activeInputIndex) == 1);
         // :: output next: Launcher
         int gen__next_output_idx = OpAuthOutputIdx(this.activeInputIndex, 0);
+        // :: leader authorizes all covenant continuations (rule 5)
+        require(OpCovOutputCount(gen__cov_id) == OpAuthOutputCount(this.activeInputIndex));
 
         // :: genesis covenants
         byte[] gen__child_group_genesis_preimage =

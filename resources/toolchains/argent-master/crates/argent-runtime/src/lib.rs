@@ -24,11 +24,10 @@ pub use context::{
 pub use silverscript_abi::ArtifactValue;
 
 use argent_artifact::{
-    ActorArtifact, ActorInterfaceArtifact, ActorTemplateArtifact, ArgentStateArtifact, ArtifactVerificationError, CardinalityArtifact,
-    EmitArtifact, EntryArtifact, EntryKindArtifact, HiddenParamArtifact, HiddenParamPurposeArtifact, HiddenParamSubjectArtifact,
-    MAX_ENTRY_RANGE_CARDINALITY, ObserveArtifact, ObservedActorArtifact, ObservedActorSideArtifact, ObservedTargetArtifact,
-    RouteTemplateLeafArtifact, RouteTemplateProofArtifact, RuntimeFieldRoleArtifact, RuntimeStatePlanArtifact, SilContractArtifact,
-    SilEntryArtifact, fixed_runtime_context_value,
+    ActorArtifact, ActorInterfaceArtifact, ActorTemplateArtifact, ArgentStateArtifact, ArtifactVerificationError, EntryArtifact,
+    HiddenParamArtifact, HiddenParamPurposeArtifact, HiddenParamSubjectArtifact, ObserveArtifact, ObservedActorArtifact,
+    ObservedActorSideArtifact, ObservedTargetArtifact, RouteTemplateLeafArtifact, RouteTemplateProofArtifact,
+    RuntimeFieldRoleArtifact, RuntimeStatePlanArtifact, SilContractArtifact, SilEntryArtifact, fixed_runtime_context_value,
 };
 use kaspa_consensus_core::{
     Hash,
@@ -174,6 +173,18 @@ impl IntoArtifactValue for BTreeMap<String, ArtifactValue> {
     }
 }
 
+impl IntoArtifactValue for Vec<BTreeMap<String, ArtifactValue>> {
+    fn into_artifact_value(self) -> ArtifactValue {
+        ArtifactValue::Array(self.into_iter().map(ArtifactValue::Object).collect())
+    }
+}
+
+impl IntoArtifactValue for &[BTreeMap<String, ArtifactValue>] {
+    fn into_artifact_value(self) -> ArtifactValue {
+        ArtifactValue::Array(self.iter().cloned().map(ArtifactValue::Object).collect())
+    }
+}
+
 /// Build an Argent source-state object for `TxBuilder` calls.
 ///
 /// Returns a `BTreeMap<String, ArtifactValue>` keyed by Argent source field
@@ -214,6 +225,19 @@ macro_rules! state {
 /// // Builds:
 /// // vec![ArgValue::Value(ArtifactValue::Int(3)), ArgValue::Actor("Alpha".to_string())]
 /// let args = args![3, actor("Alpha")];
+/// ```
+///
+/// Vectors and slices of source-state maps become one array argument. Byte
+/// vectors and slices retain their bytes representation. Borrowed state maps
+/// are cloned into owned ABI objects.
+///
+/// ```
+/// use argent_runtime::{args, state};
+///
+/// let next_states = vec![state! { amount: 90 }, state! { amount: 10 }];
+/// let witness = vec![0u8; 65];
+/// let arguments = args![next_states.as_slice(), witness];
+/// assert_eq!(arguments.len(), 2);
 /// ```
 #[macro_export]
 macro_rules! args {
@@ -277,20 +301,6 @@ pub enum BuilderError {
     UnknownAppAlias(String),
     #[error("artifact `{app}` must be attached as `{expected}`, got `{found}`")]
     AppAliasMismatch { app: String, expected: String, found: String },
-    #[error(
-        "artifact bundle app `{app}` entry `{actor}::{entry}` has invalid cardinality {minimum}..={maximum} for {section} `{handle}`"
-    )]
-    InvalidArtifactCardinality {
-        app: Box<str>,
-        actor: String,
-        entry: String,
-        section: &'static str,
-        handle: Box<str>,
-        minimum: i64,
-        maximum: i64,
-    },
-    #[error("artifact bundle app `{app}` entry `{actor}::{entry}` uses unsupported ranged {section} interaction `{handle}`")]
-    UnsupportedArtifactCardinality { app: String, actor: String, entry: String, section: &'static str, handle: String },
     #[error(
         "artifact bundle app `{app}` requires dependency `{dependency}` artifact `{expected_artifact_id}`, but it is not attached"
     )]
@@ -645,7 +655,7 @@ impl<'a> ArtifactBundle<'a> {
         if alias != expected {
             return Err(BuilderError::AppAliasMismatch { app: primary.app.clone(), expected, found: alias });
         }
-        validate_artifact(&alias, primary)?;
+        check_artifact_consistency(&alias, primary)?;
         let apps = BTreeMap::from([(alias.clone(), primary)]);
         Ok(Self { primary_alias: alias, apps })
     }
@@ -659,7 +669,7 @@ impl<'a> ArtifactBundle<'a> {
         if self.apps.contains_key(&alias) {
             return Err(BuilderError::DuplicateAppAlias(alias));
         }
-        validate_artifact(&alias, artifact)?;
+        check_artifact_consistency(&alias, artifact)?;
         self.apps.insert(alias, artifact);
         Ok(self)
     }
@@ -1686,86 +1696,10 @@ impl<'a> TxBuilder<'a> {
     }
 }
 
-fn validate_artifact(app: &str, artifact: &Artifact) -> BuilderResult<()> {
-    artifact.verify().map_err(|source| BuilderError::ArtifactVerification { app: app.to_string(), source: Box::new(source) })?;
-    validate_runtime_cardinality_support(app, artifact)?;
-    Ok(())
-}
-
-fn validate_runtime_cardinality_support(app: &str, artifact: &Artifact) -> BuilderResult<()> {
-    for actor in &artifact.argent.actors {
-        for entry in &actor.entries {
-            let validate = |section, handle: &str, cardinality| {
-                if let CardinalityArtifact::Range { minimum, maximum } = cardinality
-                    && (minimum < 0 || minimum > maximum || maximum > MAX_ENTRY_RANGE_CARDINALITY)
-                {
-                    return Err(BuilderError::InvalidArtifactCardinality {
-                        app: app.into(),
-                        actor: actor.name.clone(),
-                        entry: entry.name.clone(),
-                        section,
-                        handle: handle.into(),
-                        minimum,
-                        maximum,
-                    });
-                }
-                Ok(())
-            };
-            let reject_unsupported_range = |section, handle: &str, cardinality| {
-                validate(section, handle, cardinality)?;
-                if matches!(cardinality, CardinalityArtifact::Range { .. }) {
-                    return Err(BuilderError::UnsupportedArtifactCardinality {
-                        app: app.to_string(),
-                        actor: actor.name.clone(),
-                        entry: entry.name.clone(),
-                        section,
-                        handle: handle.to_string(),
-                    });
-                }
-                Ok(())
-            };
-
-            let mut has_consume_range = false;
-            for consume in &entry.consumes {
-                if entry.kind == EntryKindArtifact::Delegate {
-                    reject_unsupported_range("delegate consume", &consume.name, consume.cardinality)?;
-                } else {
-                    validate("consume", &consume.name, consume.cardinality)?;
-                    if matches!(consume.cardinality, CardinalityArtifact::Range { .. }) {
-                        if has_consume_range {
-                            reject_unsupported_range("consume", &consume.name, consume.cardinality)?;
-                        }
-                        has_consume_range = true;
-                    }
-                }
-            }
-            if let EmitArtifact::Outputs { outputs } = &entry.emits {
-                let mut has_emit_range = false;
-                for output in outputs {
-                    validate("emit", &output.name, output.cardinality)?;
-                    if matches!(output.cardinality, CardinalityArtifact::Range { .. }) {
-                        if has_emit_range || output.actors.len() != 1 {
-                            reject_unsupported_range("emit", &output.name, output.cardinality)?;
-                        }
-                        has_emit_range = true;
-                    }
-                }
-            }
-            for observe in &entry.observes {
-                for input in &observe.inputs {
-                    reject_unsupported_range("observed input", &format!("{}.{}", observe.name, input.name), input.cardinality)?;
-                }
-                for output in &observe.outputs {
-                    reject_unsupported_range("observed output", &format!("{}.{}", observe.name, output.name), output.cardinality)?;
-                }
-            }
-            for spawn in &entry.spawns {
-                for output in &spawn.outputs {
-                    reject_unsupported_range("spawn output", &format!("{}.{}", spawn.name, output.name), output.cardinality)?;
-                }
-            }
-        }
-    }
+fn check_artifact_consistency(app: &str, artifact: &Artifact) -> BuilderResult<()> {
+    artifact
+        .check_consistency()
+        .map_err(|source| BuilderError::ArtifactVerification { app: app.to_string(), source: Box::new(source) })?;
     Ok(())
 }
 
@@ -2086,6 +2020,28 @@ mod tests {
                 ArgValue::Actor("Alpha".to_string()),
             ]
         );
+    }
+
+    #[test]
+    fn args_macro_converts_state_vectors_and_slices_and_preserves_bytes() {
+        let first = state! { amount: 90 };
+        let second = state! { amount: 10 };
+        let states = vec![first.clone(), second.clone()];
+        let bytes = vec![0u8, 1];
+        let expected = vec![
+            ArgValue::Value(ArtifactValue::Array(vec![ArtifactValue::Object(first), ArtifactValue::Object(second)])),
+            ArgValue::Value(ArtifactValue::Bytes(bytes.clone())),
+        ];
+        assert_eq!(args![states.as_slice(), bytes.as_slice()], expected);
+        assert_eq!(args![states, bytes], expected);
+    }
+
+    #[test]
+    fn args_macro_converts_empty_state_vectors_and_slices() {
+        let states: Vec<BTreeMap<String, ArtifactValue>> = Vec::new();
+        let expected = vec![ArgValue::Value(ArtifactValue::Array(Vec::new()))];
+        assert_eq!(args![states.as_slice()], expected);
+        assert_eq!(args![states], expected);
     }
 
     #[test]

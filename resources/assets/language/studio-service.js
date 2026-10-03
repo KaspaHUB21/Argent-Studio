@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const language = require('./argent-service');
+const modules = require('./module-support');
 
 function analyze(request) {
   const active = path.resolve(request.path);
@@ -19,21 +20,22 @@ function analyze(request) {
       try { if (fs.statSync(file).size > 512000) return; text = fs.readFileSync(file, 'utf8'); } catch { return; }
     }
     if ((total += text.length) > 2000000) return;
-    const scan = language.scanDocument(text);
+    const scan = modules.scanDocument(text);
     scan.path = file;
     scans.set(key, scan);
     for (const imp of scan.imports) {
-      if (imp.path && imp.path.startsWith('.')) visit(path.resolve(path.dirname(file), imp.path));
-      else if (imp.path === 'std::core' && request.standardLibrary) visit(request.standardLibrary);
+      const target = modules.importPath(scan, imp, request.standardLibrary);
+      if (target) visit(target);
     }
   }
   visit(active);
   const scan = scans.get(active.toLowerCase());
   if (!scan) return { items: [] };
   const pos = Math.max(0, Math.min(request.position, request.text.length));
-  const declarations = [...scans.values()].flatMap(s => s.declarations.map(d => ({ ...d, path: s.path })));
+  const index = modules.moduleIndex(scans, request.standardLibrary);
+  const declarations = [...(index.exports.get(active.toLowerCase()) || [])].flatMap(([name, targets]) => targets.size === 1 ? [{ ...[...targets][0], name }] : []);
   const actor = scan.declarations.find(d => d.kind === 'actor' && d.bodyStart <= pos && pos <= d.bodyEnd);
-  const callables = scan.declarations.filter(d => ['fn', 'entry', 'delegate'].includes(d.kind))
+  const callables = scan.declarations.filter(d => ['function', 'entry', 'delegate'].includes(d.kind))
     .concat(actor ? actor.members || [] : []);
   const callable = callables.find(d => d.bodyStart <= pos && pos <= d.bodyEnd);
   const items = new Map();
@@ -42,16 +44,26 @@ function analyze(request) {
     items.set(d.name, { name: d.name, kind: d.kind || 'builtin', detail: d.signature || d.name,
       documentation: d.documentation || '', path: d.path || file || '', position: d.start == null ? -1 : d.start });
   }
-  function fields(name, seen = new Set()) {
-    if (seen.has(name)) return [];
-    seen.add(name);
-    const state = declarations.find(d => d.kind === 'state' && d.name === name);
-    if (!state) return [];
-    return [...(state.baseState ? fields(state.baseState, seen) : []), ...(state.fields || []).map(f => ({ ...f, path: state.path }))];
+  function fields(name, scope = scan, seen = new Set()) {
+    const state = index.resolve(name, scope);
+    if (!state || state.kind !== 'state') return [];
+    const key = state.moduleKey + ':' + state.name;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    const owner = scans.get(state.moduleKey);
+    return [...(state.baseState ? fields(state.baseState, owner, seen) : []), ...(state.fields || []).map(f => ({ ...f, path: state.path }))];
   }
   const prefix = request.text.slice(0, pos);
   const member = /\b([A-Za-z_]\w*)\.\w*$/.exec(prefix);
-  if (member) {
+  const namespace = /\b([A-Za-z_]\w*(?:::[A-Za-z_]\w*)*)::\w*$/.exec(prefix);
+  if (namespace) {
+    const target = index.resolve(namespace[1], scan);
+    if (target?.kind === 'module') {
+      for (const [name, entries] of index.exports.get(target.moduleKey) || []) if (entries.size === 1) add({ ...[...entries][0], name });
+    } else if (target?.kind === 'app') {
+      for (const name of target.actors || []) { const actor = index.resolve(name, scans.get(target.moduleKey)); if (actor) add(actor); }
+    }
+  } else if (member) {
     if (member[1] === 'self' && actor) {
       for (const f of fields(actor.ownedState)) add(f);
       add({ name: 'value', kind: 'property', signature: 'self.value — input amount' });

@@ -4,7 +4,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::compiler::naming::to_snake;
 use crate::compiler::syntax::body::RouteArity;
-use crate::compiler::syntax::lexer::{RESERVED_GENERATED_PREFIX, RESERVED_GENERATED_TYPE_PREFIX};
+use crate::compiler::syntax::lexer::{
+    RESERVED_GENERATED_MODULE_NAME_PREFIX, RESERVED_GENERATED_PREFIX, RESERVED_GENERATED_TYPE_PREFIX,
+};
 use crate::compiler::syntax::word;
 use crate::compiler::syntax::{
     ActorDecl, ArrayDim, Cardinality, EmitOutput, EmitSpec, EntryDecl, EntryKind, ObserveDecl, ObservedActorDecl,
@@ -688,10 +690,16 @@ fn reject_reserved_function_identifier(name: &str) -> Result<()> {
 }
 
 fn reject_reserved_identifier(context: &str, name: &str) -> Result<()> {
-    let generated_prefix =
-        [RESERVED_GENERATED_PREFIX, RESERVED_GENERATED_TYPE_PREFIX].into_iter().find(|prefix| name.starts_with(prefix));
-    if let Some(generated_prefix) = generated_prefix {
-        return Err(ArgentError::new(format!("{context} identifier `{name}` uses reserved generated namespace `{generated_prefix}`")));
+    // Only compatibility module names may enter the model in a generated namespace.
+    // The source lexer still rejects every authored use of these namespaces.
+    if !name.starts_with(RESERVED_GENERATED_MODULE_NAME_PREFIX) {
+        let generated_prefix =
+            [RESERVED_GENERATED_PREFIX, RESERVED_GENERATED_TYPE_PREFIX].into_iter().find(|prefix| name.starts_with(prefix));
+        if let Some(generated_prefix) = generated_prefix {
+            return Err(ArgentError::new(format!(
+                "{context} identifier `{name}` uses reserved generated namespace `{generated_prefix}`"
+            )));
+        }
     }
     if name == word::SELF {
         return Err(ArgentError::new(format!("{context} identifier `{}` is reserved for the current actor context", word::SELF)));

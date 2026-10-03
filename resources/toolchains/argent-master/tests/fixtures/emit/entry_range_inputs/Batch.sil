@@ -70,6 +70,8 @@ contract Batch(
 
         // :: auth outputs
         require(OpAuthOutputCount(this.activeInputIndex) == 0);
+        // :: leader authorizes all covenant continuations (rule 5)
+        require(OpCovOutputCount(gen__cov_id) == OpAuthOutputCount(this.activeInputIndex));
 
         require(gen__first_state.balance >= 0);
         require(gen__last_state.balance >= 0);

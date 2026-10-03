@@ -1,7 +1,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const language = require('./argent-service');
+const modules = require('./module-support');
 
 function structure(request) {
   const active = path.resolve(request.path);
@@ -20,10 +20,10 @@ function structure(request) {
       catch { warn('Import nicht lesbar: ' + path.basename(file), 'Cannot read import: ' + path.basename(file)); return; }
     }
     if ((size += text.length) > 2000000) { warn('Projektgrenze erreicht', 'Project size limit reached'); return; }
-    const scan = language.scanDocument(text); scan.path = file; files.set(key, scan);
+    const scan = modules.scanDocument(text); scan.path = file; files.set(key, scan);
     for (const imp of scan.imports) {
-      if (imp.path.startsWith('.')) visit(path.resolve(path.dirname(file), imp.path));
-      else if (imp.path === 'std::core' && request.standardLibrary) visit(request.standardLibrary);
+      const target = modules.importPath(scan, imp, request.standardLibrary);
+      if (target) visit(target);
     }
   }
   visit(active);
@@ -78,10 +78,16 @@ function structure(request) {
       n.symbolStart = d.start; declarations.push({ scan, d, n });
     }
   }
+  const index = modules.moduleIndex(files, request.standardLibrary);
   function resolve(name, scan, kinds) {
-    const candidates = declarations.filter(x => x.d.name === name && (!kinds || kinds.includes(x.d.kind)));
-    const local = candidates.filter(x => x.scan === scan);
-    return local.length === 1 ? local[0] : candidates.length === 1 ? candidates[0] : null;
+    const target = index.resolve(name, scan);
+    // Keep legacy multi-buffer structure editing usable for loose files without imports.
+    if (!target && !scan.imports.length && name && !name.includes('::')) {
+      const candidates = declarations.filter(x => x.d.name === name && (!kinds || kinds.includes(x.d.kind)));
+      return candidates.length === 1 ? candidates[0] : null;
+    }
+    if (!target || (kinds && !kinds.includes(target.kind))) return null;
+    return declarations.find(x => x.scan.path === target.path && x.d.start === target.start) || null;
   }
   const fields = new Map(), callables = [];
   for (const { scan, d, n } of declarations) {
@@ -100,9 +106,8 @@ function structure(request) {
     }
     if (d.kind === 'function') callables.push({ scan, d, n });
     if (d.kind === 'app') {
-      const ts = scan.tokens.filter(t => t.start >= n.start && t.end <= n.end);
-      for (let i = 0; i < ts.length - 1; i++) if (ts[i].value === 'actor') {
-        const target = resolve(ts[i + 1].value, scan, ['actor']);
+      for (const actorName of d.actors || []) {
+        const target = resolve(actorName, scan, ['actor']);
         if (target) { edge(n, target.n, 'enthält Actor'); if (target.scan === scan && target.n.parent.endsWith(':file:0')) target.n.parent = n.id; }
       }
     }
@@ -119,7 +124,7 @@ function structure(request) {
     for (const p of d.clauseVariables || []) {
       const pn = add(scan, 'output', p.name, p.start, p.end, n.id, p.signature); symbols.set(p.name, pn);
       const ts = scan.tokens; const i = ts.findIndex(t => t.start === p.start);
-      const type = ts[i + 1]?.value === ':' ? ts[i + 2]?.value : null;
+      const type = ts[i + 1]?.value === ':' ? modules.qualifiedAt(ts, i + 2) : null;
       const target = resolve(type, scan, ['actor']); if (target) { edge(pn, target.n, 'Actor-Typ'); edge(n, target.n, p.clause === 'emit' ? 'erzeugt' : p.clause); }
     }
     const ts = scan.tokens.filter(t => t.start >= d.bodyStart && t.start < d.bodyEnd);

@@ -6,7 +6,7 @@ use crate::{
         TypeArtifact, route_template_proof_receipt_id, route_template_table_receipt_id,
     },
     codec::{CodecError, decode_hex, encode_entry_sig_script},
-    compiler::codegen::emit_build_app,
+    compiler::codegen::emit_build_app_linked,
     compiler::loader::load_program,
 };
 use std::{
@@ -655,8 +655,7 @@ fn context_executes_source_state_arguments_without_exposing_generated_fields() {
     let covenant_id = Hash::from_bytes([0x45; 32]);
     let input_value = 1_000;
     let initial = state! { nonce: 0 };
-    let state_array =
-        |nonces: &[i64]| ArtifactValue::Array(nonces.iter().map(|nonce| ArtifactValue::Object(state! { nonce: *nonce })).collect());
+    let state_array = |nonces: &[i64]| nonces.iter().map(|nonce| state! { nonce: *nonce }).collect::<Vec<_>>();
 
     let scalar_utxo =
         builder.covenant_utxo("Note", initial.clone(), input_value, 0, false, Some(covenant_id)).expect("scalar Note UTXO builds");
@@ -712,11 +711,12 @@ fn context_executes_source_state_arguments_without_exposing_generated_fields() {
     let dynamic_utxo = builder
         .covenant_utxo("Note", initial.clone(), input_value, 0, false, Some(covenant_id))
         .expect("dynamic-array Note UTXO builds");
+    let dynamic_states = state_array(&[2, 5, 9]);
     let dynamic = TxContext::new()
         .actor_input(
             "Note",
             initial,
-            EntryCall::new("choose_dynamic").args(args![state_array(&[2, 5, 9])]),
+            EntryCall::new("choose_dynamic").args_with(|_, _| args![dynamic_states.as_slice()]),
             TransactionOutpoint::new(TransactionId::from_bytes([0x47; 32]), 0),
             dynamic_utxo,
             0,
@@ -1898,7 +1898,7 @@ app ChildApp {
     std::fs::write(
         temp.join("launcher.ag"),
         r#"
-import app ChildApp from "./child.ag";
+import "./child.ag";
 
 state LauncherState {
     int launches;
@@ -2091,7 +2091,7 @@ fn context_spawns_a_static_actor_from_a_linked_app() {
         launcher_artifact.argent.interfaces.imports[0].fingerprint_hex,
         child_artifact.argent.interfaces.exports[0].fingerprint_hex
     );
-    launcher_artifact.verify_template_plan().expect("linked static-spawn template plan verifies");
+    launcher_artifact.check_template_plan_consistency().expect("linked static-spawn template plan verifies");
     let mut malformed_target = launcher_artifact.clone();
     let Some(ActorTargetArtifact::StaticActor { app, .. }) =
         &mut malformed_target.argent.actors[0].entries[0].spawns[0].outputs[0].target
@@ -2100,7 +2100,7 @@ fn context_spawns_a_static_actor_from_a_linked_app() {
     };
     *app = "OtherApp".to_string();
     assert!(
-        matches!(malformed_target.verify_template_plan(), Err(TemplatePlanError::InvalidSpawnMetadata { .. })),
+        matches!(malformed_target.check_template_plan_consistency(), Err(TemplatePlanError::InvalidSpawnMetadata { .. })),
         "linked spawn metadata must agree with its shared actor-template witnesses"
     );
     assert_eq!(
@@ -2937,7 +2937,7 @@ fn gate_less_route_family_rejects_selector_for_appended_rep() {
 #[test]
 fn builder_rejects_template_plan_hash_mismatch() {
     let mut artifact = tickets_artifact();
-    artifact.verify_template_plan().expect("fixture receipt verifies before mutation");
+    artifact.check_template_plan_consistency().expect("fixture receipt verifies before mutation");
     let issuer_receipt = artifact
         .argent
         .template_plan
@@ -2965,7 +2965,7 @@ fn builder_rejects_template_plan_hash_mismatch() {
 #[test]
 fn builder_rejects_sil_template_hash_mismatch() {
     let mut artifact = tickets_artifact();
-    artifact.verify_sil_abi().expect("fixture Sil ABI verifies before mutation");
+    artifact.check_sil_abi_consistency().expect("fixture Sil ABI is consistent before mutation");
     let issuer_contract = artifact.sil_abi.contracts.get_mut("Issuer").expect("Issuer Sil contract exists");
     issuer_contract.compiled.template_hash = [0; 32];
     let issuer_receipt = artifact
@@ -2995,7 +2995,7 @@ fn builder_rejects_sil_template_hash_mismatch() {
 #[test]
 fn builder_rejects_route_template_table_mismatch() {
     let mut artifact = example_artifact("examples/toy_chess/app.ag", "toy-chess-route-table-plan");
-    artifact.verify_template_plan().expect("fixture receipt verifies before mutation");
+    artifact.check_template_plan_consistency().expect("fixture receipt verifies before mutation");
     let table = artifact
         .argent
         .template_plan
@@ -3027,7 +3027,7 @@ fn builder_rejects_route_template_table_mismatch() {
 #[test]
 fn builder_rejects_route_template_merkle_proof_mismatch() {
     let mut artifact = example_artifact("examples/toy_chess/app.ag", "toy-chess-route-proof-plan");
-    artifact.verify_template_plan().expect("fixture receipt verifies before mutation");
+    artifact.check_template_plan_consistency().expect("fixture receipt verifies before mutation");
     let proof = artifact
         .argent
         .template_plan
@@ -3618,11 +3618,11 @@ fn foreign_source_actors_require_an_app_import() {
     let fixture = "tests/fixtures/runtime/context_observed_self_merge";
     let direct =
         crate::build_file(format!("{fixture}/controller_direct.ag"), std::env::temp_dir().join("argent-invalid-direct-actor-import"))
-            .expect_err("a direct actor import cannot add a foreign actor to the selected app");
+            .expect_err("a namespaced source actor cannot add a foreign actor to the selected app");
     assert!(
         direct
             .to_string()
-            .contains("direct actor import `Asset` is not part of selected app `CtrlApp`; use `import actor AssetApp::Asset"),
+            .contains("references actor `Asset` outside selected app `CtrlApp`; foreign actors must be imported through their app"),
         "unexpected error: {direct}"
     );
 
@@ -4037,7 +4037,7 @@ fn selected_app_artifact(input: &str, app: &str, name: &str) -> Artifact {
         fs::remove_dir_all(&out_dir).expect("old temp dir removed");
     }
     let program = load_program(PathBuf::from(input).as_path()).expect("fixture source loads");
-    emit_build_app(&program, app, &out_dir).expect("selected app artifact builds");
+    emit_build_app_linked(&program, app, &BTreeMap::new(), &out_dir).expect("selected app artifact builds");
     let json = fs::read_to_string(out_dir.join("artifact.json")).expect("artifact json exists");
     let artifact = serde_json::from_str(&json).expect("artifact deserializes");
     fs::remove_dir_all(out_dir).expect("temp build dir removed");

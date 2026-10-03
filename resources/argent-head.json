@@ -1,0 +1,15 @@
+{
+  "sha": "b312deda6fe10f6493c8d49eb748e3f61860458a",
+  "repository": "https://github.com/argent-lang/argent",
+  "archiveUrl": "https://codeload.github.com/argent-lang/argent/zip/b312deda6fe10f6493c8d49eb748e3f61860458a",
+  "archiveSha256": "81e632c6d99a5bac09e2ab684a385581e023a5637a15144e2f09ef54cb9b6869",
+  "updatedAt": "2026-10-03",
+  "previousSha": "d08e52dd1e18c9f7e9a2dc482048c2db31d25611",
+  "silverscriptSha": "3ed973335b59269293564805cc2c58a14595ec03",
+  "rustyKaspaSha": "a41a333b08848f41bf737b72592e463a6011b8ac",
+  "adaptations": [
+    "Preserve Studio-specific examples/studio_test.rs bridge to real Argent runtime and Kaspa VM.",
+    "Omit upstream examples/build generated artifacts; Studio compiles current sources into fresh output."
+  ],
+  "removedSourceFiles": []
+}

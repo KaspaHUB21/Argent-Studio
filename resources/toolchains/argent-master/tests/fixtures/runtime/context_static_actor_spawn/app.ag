@@ -39,6 +39,8 @@ actor Child owns ChildState {
         launcher: Launcher,
     } {}
 
+    entry discard() emits none {}
+
     entry return_to_launcher() emits next: Launcher {
         LauncherState next_state = {
             launches: 0,

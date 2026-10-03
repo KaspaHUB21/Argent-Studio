@@ -16,8 +16,9 @@ Features:
 - Completion includes Argent keywords, primitive types, builtins, top-level
   `state`, `actor`, `actor enum`, `fn`, `const`, and `app` declarations, plus
   actor `fn`, `entry`, and `delegate` callables.
-- Relative imports are followed recursively, so declarations from imported
-  `.ag` files participate in completion, semantic highlighting, hover, and
+- Imports are followed recursively. Unaliased imports expose declarations,
+  `import "./file.ag" as name` exposes a namespace. Qualified references and
+  app actor members participate in completion, highlighting, hover, and
   go-to-definition.
 - Import paths are clickable and support go-to-definition.
 - `///` and `/** ... */` comments immediately above declarations appear as

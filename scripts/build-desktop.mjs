@@ -1,7 +1,7 @@
 import './configure-build.mjs';
 // Build the self-contained desktop binary; native helper binaries must match this OS.
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, cpSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -12,5 +12,8 @@ if (!existsSync(helper)) throw new Error('Native compiler missing: run node scri
 run(process.execPath, ['node_modules/vite/bin/vite.js', 'build']);
 const debug = process.argv.includes('--debug');
 run('cargo', ['build', '--locked', '--manifest-path', 'src-tauri/Cargo.toml', '--features', 'custom-protocol', ...(debug ? [] : ['--release'])]);
-console.log(`Desktop binary: ${path.join(root, 'src-tauri/target', debug ? 'debug' : 'release', 'argent-studio-tauri' + (process.platform === 'win32' ? '.exe' : ''))}`);
+const target = path.resolve(env.CARGO_TARGET_DIR || path.join(root, 'src-tauri/target'));
+const output = path.join(target, debug ? 'debug' : 'release');
+cpSync(path.join(root, 'resources'), path.join(output, 'resources'), { recursive: true });
+console.log(`Desktop binary: ${path.join(output, 'argent-studio-tauri' + (process.platform === 'win32' ? '.exe' : ''))}`);
 console.log('For an installer/application bundle: node node_modules/@tauri-apps/cli/tauri.js build');

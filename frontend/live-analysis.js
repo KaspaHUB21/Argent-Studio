@@ -4,6 +4,11 @@ const types = new Set(primitiveTypes);
 const builtinSignatures=new Map(builtins.map(b=>{const start=b.signature.indexOf('(')+1,end=b.signature.indexOf(')',start);let offset=start;const ranges=b.signature.slice(start,end).split(',').filter(p=>p.trim()).map(p=>{const leading=p.length-p.trimStart().length,r={from:offset+leading,to:offset+p.trimEnd().length};offset+=p.length+1;return r;});return [b.name,{text:b.signature,ranges}];}));
 const named = new Set(['app','actor','state','enum','fn','entry','delegate']);
 const controls = new Set(['if','else','for','while']);
+export function qualifiedLiveName(tokens,start) {
+ let end=start+1,name=tokens[start]?.kind==='name'?tokens[start].value:'';
+ while(name&&tokens[end]?.value===':'&&tokens[end+1]?.value===':'&&tokens[end+2]?.kind==='name'){name+='::'+tokens[end+2].value;end+=3;}
+ return {name,end};
+}
 export function analyzeLive(text) {
  const tokens=[],ignored=[],diagnostics=[],stack=[],pairs=new Map();
  const pattern=/\/\/[^\n]*|\/\*[\s\S]*?(?:\*\/|$)|"(?:\\[\s\S]|[^"\\])*(?:"|$)|'(?:\\[\s\S]|[^'\\])*(?:'|$)|0[xX][0-9a-fA-F]+|[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?|[A-Za-z_][A-Za-z_0-9]*|[^\s]/g;
@@ -20,7 +25,7 @@ export function analyzeLive(text) {
  const findBody=start=>{let j=start;while(j<tokens.length){const v=tokens[j].value;if(v===';'||v==='}'||(named.has(v)&&tokens[j+1]?.kind==='name'))return null;if(['observes','spawns'].includes(v)){while(j<tokens.length&&tokens[j].value!=='{'&&![';','}'].includes(tokens[j].value))j++;if(!pairs.has(j))return null;j=pairs.get(j)+1;continue;}if(v==='{'){const prev=tokens[j-1]?.value;if(['emits','consumes','observes','inputs','outputs'].includes(prev)){if(!pairs.has(j))return null;j=pairs.get(j)+1;continue;}return j;}j++;}return null;};
  for(let i=0;i<tokens.length;i++){if(!named.has(tokens[i].value)||tokens[i+1]?.kind!=='name')continue;const kind=tokens[i].value,nameIndex=i+1; if(tokens[i-1]?.value==='import')continue;
   const body=findBody(i+2);if(body===null)continue;const parent=scopeAtToken[i],bodyScope=braceScopes.get(body);if(bodyScope===undefined)continue;
-  const s=add(nameIndex,parent,kind,{bodyScope});if(kind==='actor'&&tokens[i+2]?.value==='owns'&&tokens[i+3]?.kind==='name')ownedScopes.set(bodyScope,tokens[i+3].value);if(['state','enum'].includes(kind))knownTypes.add(s.name);
+  const s=add(nameIndex,parent,kind,{bodyScope});if(kind==='actor'&&tokens[i+2]?.value==='owns'&&tokens[i+3]?.kind==='name')ownedScopes.set(bodyScope,qualifiedLiveName(tokens,i+3).name);if(['state','enum'].includes(kind))knownTypes.add(s.name);
   blocks.push({from:tokens[body].from,to:pairs.has(body)?tokens[pairs.get(body)].to:text.length,label:kind+' '+s.name,headerFrom:tokens[i].from,headerTo:tokens[body].from});
   if(['fn','entry','delegate'].includes(kind)&&tokens[i+2]?.value==='('&&pairs.has(i+2)){
    const open=i+2,end=pairs.get(open),params=[];let start=open+1;
@@ -29,7 +34,7 @@ export function analyzeLive(text) {
   }
  }
  const parameterHeaders=[];for(let i=0;i<tokens.length;i++)if(['fn','entry','delegate'].includes(tokens[i].value)&&tokens[i+2]?.value==='(')parameterHeaders.push([i+2,pairs.get(i+2)??tokens.length]);
- for(let i=0;i<tokens.length;i++){if(!knownTypes.has(tokens[i].value)||parameterHeaders.some(([start,end])=>start<i&&i<end))continue;let j=i+1;while(tokens[j]?.value==='['&&pairs.has(j))j=pairs.get(j)+1;
+ for(let i=0;i<tokens.length;i++){const qualified=qualifiedLiveName(tokens,i);if((!knownTypes.has(qualified.name)&&!qualified.name.includes('::'))||tokens[i-1]?.value===':'||parameterHeaders.some(([start,end])=>start<i&&i<end))continue;let j=qualified.end;while(tokens[j]?.value==='['&&pairs.has(j))j=pairs.get(j)+1;
   if(tokens[j]?.kind!=='name'||!['=',';',',',')'].includes(tokens[j+1]?.value))continue;
   const prev=tokens[i-1]?.value;if(prev==='.'||prev==='->')continue; if(declarations.has(j))continue;
   const scope=scopeAtToken[j];add(j,scope,'variable');
@@ -39,7 +44,7 @@ export function analyzeLive(text) {
  const scopeAt=pos=>{let best=0;for(let i=1;i<scopes.length;i++)if(scopes[i].from<=pos&&pos<=scopes[i].to&&scopes[i].depth>scopes[best].depth)best=i;return best;};
  const symbolIndex=new Map();for(const symbol of symbols){const key=symbol.scope+':'+symbol.name;if(!symbolIndex.has(key))symbolIndex.set(key,[]);symbolIndex.get(key).push(symbol);}
  const hasBinding=(name,pos)=>{let scope=scopeAt(pos);while(scope!==null){if((symbolIndex.get(scope+':'+name)||[]).some(s=>s.kind!=='variable'||s.from<=pos))return true;scope=scopes[scope].parent;}return false;};
- const resolve=(name,pos,index=-1)=>{if(declarations.has(index))return declarations.get(index);if(index>=0&&tokens[index+1]?.value===':')return null;let scope=index>=0?scopeAtToken[index]:scopeAt(pos);if(index>=0&&tokens[index-1]?.value==='.'){if(tokens[index-2]?.value!=='self')return null;while(scope!==null){const fields=(symbolIndex.get(scope+':'+name)||[]).filter(s=>s.kind==='field');if(fields.length===1)return fields[0];scope=scopes[scope].parent;}return null;}while(scope!==null){const found=(symbolIndex.get(scope+':'+name)||[]).filter(s=>s.kind!=='variable'||s.from<=pos);if(found.length===1)return found[0];if(found.length>1)return null;scope=scopes[scope].parent;}return null;};
+ const resolve=(name,pos,index=-1)=>{if(declarations.has(index))return declarations.get(index);if(index>=0&&(tokens[index+1]?.value===':'||tokens[index-1]?.value===':'&&tokens[index-2]?.value===':'))return null;let scope=index>=0?scopeAtToken[index]:scopeAt(pos);if(index>=0&&tokens[index-1]?.value==='.'){if(tokens[index-2]?.value!=='self')return null;while(scope!==null){const fields=(symbolIndex.get(scope+':'+name)||[]).filter(s=>s.kind==='field');if(fields.length===1)return fields[0];scope=scopes[scope].parent;}return null;}while(scope!==null){const found=(symbolIndex.get(scope+':'+name)||[]).filter(s=>s.kind!=='variable'||s.from<=pos);if(found.length===1)return found[0];if(found.length>1)return null;scope=scopes[scope].parent;}return null;};
  return {tokens,symbols,blocks:blocks.sort((a,b)=>a.from-b.from||b.to-a.to),diagnostics,ignored,pairs,scopes,scopeAt,resolve,hasBinding,callables};
 }
 

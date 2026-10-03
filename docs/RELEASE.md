@@ -31,3 +31,9 @@ Then run node scripts/update-manifest.mjs. Publish the matching setup.exe, setup
 Run the packaged executable with --verify-update --verify-update-report followed by an absolute JSON report path to test the public feed. This mode downloads and verifies the released installer, checks that a corrupted signature is rejected, and exits without installing. It deliberately permits re-verifying the current version only in this explicit diagnostic mode.
 
 This cryptographic update signature does not replace Windows Authenticode signing. Updates are enabled in Windows release builds and macOS preview builds. For a combined release, include both Mac app archives and their updater signatures and generate the complete feed as described in [MACOS.md](MACOS.md). Mac preview ZIPs are first-install downloads; they are not Apple-notarized builds.
+
+## Continuing the published multi-platform release
+
+The existing GitHub release v0.45.12 (published 2026-09-12) already ships Windows x64, macOS arm64, and macOS x64. Prepare the next version in the same repository and existing update feed. Preserve previous tags and downloads. No publication, tag creation, or push is performed by the preparation scripts or CI workflows.
+
+For the next release collect the Windows setup and signature, both Mac preview ZIPs, both Mac update archives and signatures, the complete three-platform `latest.json`, and SHA-256 checksums. Match every artifact to the same source version and record Windows and each Mac runner's independent result. The main macOS CI now runs on pull requests and requires the new native AI/editor/history checks plus bundled runtime provenance and hash validation. Test-only builds with an ephemeral updater key and loopback feed must never be included among release downloads.

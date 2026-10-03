@@ -10,6 +10,8 @@ const {
   PRIMITIVE_DOCUMENTATION,
   PRIMITIVE_TYPES,
   builtinCall,
+  buildModuleExports,
+  resolveSymbolPath,
   scanDocument,
   standardModuleRelativePath,
   tokenize,
@@ -76,7 +78,7 @@ test('resolves compiler-standard modules for import navigation and symbol indexi
 test('scans imports and top-level Argent declarations from incomplete bodies', () => {
   const source = `
 import "./types.ag";
-import actor Player from "./player.ag";
+import "./player.ag" as player;
 
 const byte[32] ZERO = 0x00;
 state PlayerState {
@@ -97,14 +99,15 @@ app Stones {
 
   const scan = scanDocument(source);
   assert.deepEqual(
-    scan.imports.map(({ kind, name, path }) => ({ kind, name, path })),
+    scan.imports.map(({ kind, alias, path }) => ({ kind, alias, path })),
     [
-      { kind: 'module', name: undefined, path: './types.ag' },
-      { kind: 'actor', name: 'Player', path: './player.ag' },
+      { kind: 'module', alias: undefined, path: './types.ag' },
+      { kind: 'module', alias: 'player', path: './player.ag' },
     ],
   );
   assert.equal(source.slice(scan.imports[0].pathStart, scan.imports[0].pathEnd), './types.ag');
   assert.equal(source.slice(scan.imports[1].pathStart, scan.imports[1].pathEnd), './player.ag');
+  assert.equal(source.slice(scan.imports[1].aliasStart, scan.imports[1].aliasEnd), 'player');
   assert.deepEqual(
     scan.declarations.map(({ kind, name }) => ({ kind, name })),
     [
@@ -126,6 +129,48 @@ app Stones {
   assert.equal(scan.declarations.at(-1).parameters[0].signature, 'byte[32] owner');
   assert.ok(scan.declarations.at(-1).bodyStart < source.lastIndexOf('owner'));
   assert.equal(scan.declarations.at(-1).bodyEnd, source.length);
+});
+
+test('scans qualified types, owned state, and app actors', () => {
+  const scan = scanDocument(`
+import "./assets.ag" as assets;
+state Wrapper expands assets::Base { slot: assets::Stored; }
+actor Owner owns assets::Stored {
+  fn read(assets::Stored value) -> int { return 1; }
+}
+app Main { actor assets::AssetApp::Asset; actor Owner; }
+`);
+  assert.equal(scan.declarations[0].baseState, 'assets::Base');
+  assert.equal(scan.declarations[0].fields[0].type, 'assets::Stored');
+  assert.equal(scan.declarations[1].ownedState, 'assets::Stored');
+  assert.equal(scan.declarations[1].members[0].parameters[0].type, 'assets::Stored');
+  assert.deepEqual(scan.declarations[2].actors, ['assets::AssetApp::Asset', 'Owner']);
+});
+
+test('resolves module aliases, open reexports, and app members without guessing collisions', () => {
+  const declaration = (kind, name, moduleKey, extra = {}) => ({ kind, name, moduleKey, ...extra });
+  const leaf = { key: 'leaf', declarations: [declaration('state', 'Stored', 'leaf')], imports: [] };
+  const middle = { key: 'middle', declarations: [], imports: [{ alias: 'shared', targetKey: 'leaf' }] };
+  const child = {
+    key: 'child',
+    declarations: [declaration('actor', 'Asset', 'child'), declaration('app', 'AssetApp', 'child', { actors: ['Asset'] })],
+    imports: [],
+  };
+  const root = {
+    key: 'root',
+    declarations: [declaration('state', 'Stored', 'root')],
+    imports: [{ alias: 'assets', targetKey: 'middle' }, { alias: 'child', targetKey: 'child' }],
+  };
+  const exports = buildModuleExports([root, middle, leaf, child]);
+  assert.equal(resolveSymbolPath(exports, 'root', ['Stored']), root.declarations[0]);
+  assert.equal(resolveSymbolPath(exports, 'root', ['assets', 'shared', 'Stored']), leaf.declarations[0]);
+  assert.equal(resolveSymbolPath(exports, 'root', ['child', 'AssetApp', 'Asset']), child.declarations[0]);
+  assert.equal(resolveSymbolPath(exports, 'root', ['Asset']), undefined);
+
+  const open = { key: 'open', declarations: [], imports: [{ targetKey: 'leaf' }] };
+  assert.equal(resolveSymbolPath(buildModuleExports([open, leaf]), 'open', ['Stored']), leaf.declarations[0]);
+  root.imports.push({ targetKey: 'leaf' });
+  assert.equal(resolveSymbolPath(buildModuleExports([root, middle, leaf, child]), 'root', ['Stored']), undefined);
 });
 
 test('ignores declaration-shaped text in comments and strings', () => {

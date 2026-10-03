@@ -7,6 +7,7 @@ use crate::error::{ArgentError, Result};
 
 pub const RESERVED_GENERATED_PREFIX: &str = "gen__";
 pub const RESERVED_GENERATED_TYPE_PREFIX: &str = "Gen__";
+pub const RESERVED_GENERATED_MODULE_NAME_PREFIX: &str = "gen__module__";
 
 #[derive(Debug, Clone)]
 pub struct Token {

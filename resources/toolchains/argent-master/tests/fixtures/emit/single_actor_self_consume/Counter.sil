@@ -37,6 +37,8 @@ contract Counter(
         require(OpAuthOutputCount(this.activeInputIndex) == 1);
         // :: output next: Counter
         int gen__next_output_idx = OpAuthOutputIdx(this.activeInputIndex, 0);
+        // :: leader authorizes all covenant continuations (rule 5)
+        require(OpCovOutputCount(gen__cov_id) == OpAuthOutputCount(this.activeInputIndex));
 
         State copied = actor_identity(global_identity(gen__other_state));
         copied = global_identity(gen__other_state);

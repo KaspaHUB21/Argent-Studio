@@ -166,10 +166,11 @@ export function translateStructureText(text,language='de'){
  let result=text;for(const [de,en]of ordered)if(de.length>5&&result.includes(de))result=result.replaceAll(de,en);
  return result;
 }
-export function installLanguage(root,getSettings){
+export function installLanguage(root,getSettings,{onLanguageChange}={}){
  const originals=new WeakMap(),attributes=new WeakMap();let applying=false,lastLanguage='';
  function apply(){if(applying)return;applying=true;try{
   const language=getSettings?.()?.language||'de',translate=text=>translateStructureText(text,language);
+  if(language!==lastLanguage){lastLanguage=language;onLanguageChange?.(language);}
   const walk=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
   for(let node=walk.nextNode();node;node=walk.nextNode()){
    if(node.parentElement?.closest('textarea,.cm-editor,script,style,[translate="no"]'))continue;
@@ -186,8 +187,9 @@ export function installLanguage(root,getSettings){
    }
   }
   for(const area of root.querySelectorAll('textarea[readonly]:not(.structure-fragment),[data-translate-value]')){
+   if(area.closest('[translate="no"],.cm-editor'))continue;
    let old=originals.get(area);if(!old||area.value!==old.rendered)old={source:area.value};old.rendered=translate(old.source);originals.set(area,old);if(area.value!==old.rendered)area.value=old.rendered;
   }
  }finally{applying=false;}}
- const observer=new MutationObserver(apply);observer.observe(root,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['title','aria-label','placeholder']});const timer=setInterval(()=>{const language=getSettings?.()?.language;if(language!==lastLanguage){lastLanguage=language;apply();}},250);apply();return()=>{observer.disconnect();clearInterval(timer);};
+ const observer=new MutationObserver(apply);observer.observe(root,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['title','aria-label','placeholder']});const timer=setInterval(()=>{const language=getSettings?.()?.language;if(language!==lastLanguage)apply();},250);apply();return()=>{observer.disconnect();clearInterval(timer);};
 }

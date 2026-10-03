@@ -58,6 +58,8 @@ contract Batch(
         int gen__next_output_count = OpAuthOutputCount(this.activeInputIndex);
         require(gen__next_output_count >= 1);
         require(gen__next_output_count <= 3);
+        // :: leader authorizes all covenant continuations (rule 5)
+        require(OpCovOutputCount(gen__cov_id) == OpAuthOutputCount(this.activeInputIndex));
 
         AccountState[] next_states;
         AccountState reserve = AccountState {

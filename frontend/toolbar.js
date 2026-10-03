@@ -33,7 +33,7 @@ export function organizeToolbar(toolbar, buildbar, views, language) {
   }
   const examples = toolbar.querySelector('.examples-menu');
   menu('project', 'Projekt', 'Project', ['new-project', 'open-project', 'duplicate-project', document.createElement('hr'), examples]);
-  menu('file', 'Datei', 'File', ['new-file', 'close']);
+  menu('file', 'Datei', 'File', ['new-file', 'close', 'code-history']);
   const entry = find('entry-label');
   const entryContext = document.createElement('div'); entryContext.className = 'build-context';
   entryContext.append(text(document.createElement('span'), 'Build-Datei:', 'Build entry:'), entry);

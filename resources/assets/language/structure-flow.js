@@ -102,7 +102,7 @@ function projectFlow(model, scans) {
         const existing = children(original.id).find(n => n.name === p.name && n.kind === 'output'); if (!existing) continue;
         const role = ['emit', 'spawn'].includes(p.clause) ? 'output' : 'input';
         const n = copy(existing, action.id, role); const i = scan.tokens.findIndex(t => t.start === p.start);
-        n.valueType = scan.tokens[i + 1]?.value === ':' ? scan.tokens[i + 2]?.value || '' : '';
+        n.valueType = scan.tokens[i + 1]?.value === ':' ? require('./module-support').qualifiedAt(scan.tokens, i + 2) : '';
         n.detail = p.clause + ' ' + n.name + (n.valueType ? ': ' + n.valueType : '');
         if (role === 'output') outputs.set(p.name, n); else symbols.set(p.name, n);
       }

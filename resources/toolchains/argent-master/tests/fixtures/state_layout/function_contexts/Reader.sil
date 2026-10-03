@@ -83,6 +83,8 @@ contract Reader(
 
         // :: auth outputs
         require(OpAuthOutputCount(this.activeInputIndex) == 0);
+        // :: leader authorizes all covenant continuations (rule 5)
+        require(OpCovOutputCount(gen__cov_id) == OpAuthOutputCount(this.activeInputIndex));
 
         SharedState[2] fixed_from_peer = SharedState[_]{ value, SharedState {
             // :: user declared fields

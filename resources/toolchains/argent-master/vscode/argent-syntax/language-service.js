@@ -407,6 +407,9 @@ function typeEnd(tokens, start) {
   }
 
   let index = start + 1;
+  while (symbol(tokens[index], ':') && symbol(tokens[index + 1], ':') && ident(tokens[index + 2])) {
+    index += 3;
+  }
   for (const [open, close] of [
     ['<', '>'],
     ['[', ']'],
@@ -429,6 +432,17 @@ function typeEnd(tokens, start) {
     }
   }
   return index;
+}
+
+function qualifiedName(tokens, start) {
+  if (!ident(tokens[start])) {
+    return undefined;
+  }
+  let end = start + 1;
+  while (symbol(tokens[end], ':') && symbol(tokens[end + 1], ':') && ident(tokens[end + 2])) {
+    end += 3;
+  }
+  return { name: tokens.slice(start, end).filter((token) => token.kind === 'ident').map((token) => token.value).join('::'), end };
 }
 
 function functionParameters(source, tokens, nameIndex) {
@@ -714,40 +728,27 @@ function scanDocument(source) {
     const token = tokens[index];
 
     if (braceDepth === 0 && ident(token, 'import')) {
-      if (
-        ident(tokens[index + 1], 'actor') &&
-        ident(tokens[index + 2]) &&
-        ident(tokens[index + 3], 'from') &&
-        tokens[index + 4]?.kind === 'string'
-      ) {
-        imports.push({
-          kind: 'actor',
-          name: tokens[index + 2].value,
-          path: tokens[index + 4].value,
-          start: tokens[index + 2].start,
-          end: tokens[index + 2].end,
-          pathStart: tokens[index + 4].start + 1,
-          pathEnd: tokens[index + 4].end - 1,
-        });
-        index += 4;
-      } else if (tokens[index + 1]?.kind === 'string') {
+      if (tokens[index + 1]?.kind === 'string') {
+        const aliasToken = ident(tokens[index + 2], 'as') && ident(tokens[index + 3]) ? tokens[index + 3] : undefined;
         imports.push({
           kind: 'module',
           path: tokens[index + 1].value,
+          alias: aliasToken?.value,
+          aliasStart: aliasToken?.start,
+          aliasEnd: aliasToken?.end,
           start: tokens[index + 1].start,
           end: tokens[index + 1].end,
           pathStart: tokens[index + 1].start + 1,
           pathEnd: tokens[index + 1].end - 1,
         });
-        index += 1;
+        index += aliasToken ? 3 : 1;
       }
     } else if (braceDepth === 0 && ident(token, 'state') && ident(tokens[index + 1])) {
       const name = tokens[index + 1];
       const openIndex = findSymbolIndex(tokens, index + 2, '{');
       const closeIndex = matchingBraceIndex(tokens, openIndex);
       const end = openIndex >= 0 ? tokens[openIndex].start : findHeaderEnd(tokens, index, new Set(['{']));
-      const baseState =
-        ident(tokens[index + 2], 'expands') && ident(tokens[index + 3]) ? tokens[index + 3].value : undefined;
+      const baseState = ident(tokens[index + 2], 'expands') ? qualifiedName(tokens, index + 3)?.name : undefined;
       declarations.push(
         declaration(
           'state',
@@ -773,8 +774,7 @@ function scanDocument(source) {
         const openIndex = findSymbolIndex(tokens, index + 2, '{');
         const closeIndex = matchingBraceIndex(tokens, openIndex);
         const end = openIndex >= 0 ? tokens[openIndex].start : findHeaderEnd(tokens, index, new Set(['{']));
-        const ownedState =
-          ident(tokens[index + 2], 'owns') && ident(tokens[index + 3]) ? tokens[index + 3].value : undefined;
+        const ownedState = ident(tokens[index + 2], 'owns') ? qualifiedName(tokens, index + 3)?.name : undefined;
         declarations.push(
           declaration(
             'actor',
@@ -822,9 +822,21 @@ function scanDocument(source) {
       }
     } else if (braceDepth === 0 && ident(token, 'app') && ident(tokens[index + 1])) {
       const name = tokens[index + 1];
+      const openIndex = findSymbolIndex(tokens, index + 2, '{');
+      const closeIndex = matchingBraceIndex(tokens, openIndex);
       const end = findHeaderEnd(tokens, index, new Set(['{']));
+      const actors = [];
+      for (let member = openIndex + 1; openIndex >= 0 && member < (closeIndex >= 0 ? closeIndex : tokens.length); member += 1) {
+        if (ident(tokens[member], 'actor')) {
+          const actor = qualifiedName(tokens, member + 1);
+          if (actor) {
+            actors.push(actor.name);
+            member = actor.end - 1;
+          }
+        }
+      }
       declarations.push(
-        declaration('app', name, normalizedSlice(source, token.start, end), leadingDocumentation(source, token.start)),
+        declaration('app', name, normalizedSlice(source, token.start, end), leadingDocumentation(source, token.start), [], { actors }),
       );
     }
 
@@ -838,6 +850,80 @@ function scanDocument(source) {
   return { source, tokens, imports, declarations };
 }
 
+function buildModuleExports(modules) {
+  const exports = new Map(modules.map((module) => [module.key, new Map()]));
+  const add = (names, name, target) => {
+    const targets = names.get(name) ?? new Set();
+    const size = targets.size;
+    targets.add(target);
+    names.set(name, targets);
+    return targets.size !== size;
+  };
+
+  for (const module of modules) {
+    const names = exports.get(module.key);
+    for (const declaration of module.declarations) {
+      add(names, declaration.name, declaration);
+    }
+    for (const imported of module.imports) {
+      if (imported.alias && exports.has(imported.targetKey)) {
+        add(names, imported.alias, { kind: 'module', name: imported.alias, moduleKey: imported.targetKey });
+      }
+    }
+  }
+
+  let changed;
+  do {
+    changed = false;
+    for (const module of modules) {
+      const names = exports.get(module.key);
+      for (const imported of module.imports) {
+        if (!imported.alias) {
+          for (const [name, targets] of exports.get(imported.targetKey) ?? []) {
+            for (const target of targets) {
+              changed = add(names, name, target) || changed;
+            }
+          }
+        }
+      }
+    }
+  } while (changed);
+  return exports;
+}
+
+function resolveSymbolPath(exports, moduleKey, segments, seen = new Set()) {
+  const path = `${moduleKey}:${segments.join('::')}`;
+  if (seen.has(path)) {
+    return undefined;
+  }
+  seen.add(path);
+  let names = exports.get(moduleKey);
+  for (let index = 0; index < segments.length; index += 1) {
+    const targets = names?.get(segments[index]);
+    if (!targets || targets.size !== 1) {
+      return undefined;
+    }
+    const [target] = targets;
+    if (index === segments.length - 1) {
+      return target;
+    }
+    if (target.kind === 'module') {
+      names = exports.get(target.moduleKey);
+    } else if (target.kind === 'app' && index === segments.length - 2) {
+      const actorName = segments[index + 1];
+      const actors = (target.actors ?? []).filter((actor) => actor.split('::').at(-1) === actorName);
+      if (actors.length !== 1) {
+        return undefined;
+      }
+      const actor = resolveSymbolPath(exports, target.moduleKey, actors[0].split('::'), seen);
+      return actor?.kind === 'actor' ? actor : undefined;
+    } else {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 module.exports = {
   BUILTINS,
   KEYWORD_DOCUMENTATION,
@@ -845,6 +931,8 @@ module.exports = {
   PRIMITIVE_DOCUMENTATION,
   PRIMITIVE_TYPES,
   builtinCall,
+  buildModuleExports,
+  resolveSymbolPath,
   scanDocument,
   standardModuleRelativePath,
   tokenize,

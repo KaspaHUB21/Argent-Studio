@@ -41,6 +41,8 @@ contract Controller(
         require(OpAuthOutputCount(this.activeInputIndex) == 1);
         // :: output next_peer: Peer
         int gen__next_peer_output_idx = OpAuthOutputIdx(this.activeInputIndex, 0);
+        // :: leader authorizes all covenant continuations (rule 5)
+        require(OpCovOutputCount(gen__cov_id) == OpAuthOutputCount(this.activeInputIndex));
 
         PeerState peer_state = PeerState {
             // :: user declared fields

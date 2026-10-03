@@ -26,3 +26,11 @@ Keep the Windows installer and both Mac update archives together in the same rel
 `node scripts/update-manifest.mjs release-input.json` accepts an `artifacts` object mapping `windows-x86_64`, `darwin-aarch64`, and `darwin-x86_64` to local signed files, plus an optional `output` path. This mode rejects missing platforms. Upload only after tests and signature verification pass. Do not replace the live feed with a partial Mac-only manifest. Without an input file, the existing Windows-only release process remains available.
 
 Native file-picker interaction, Gatekeeper behavior on a clean user Mac, Apple notarization, and actual paid AI provider requests require separate validation; browser mocks do not prove those paths.
+
+## Preparing the next existing GitHub release
+
+The published v0.45.12 release already contains Windows x64 and native macOS arm64/x64 downloads, updater signatures, `latest.json`, and `SHA256SUMS.txt`. Continue this release structure and retain `studio.argent.tauri`, the updater public key, and the existing HTTPS feed. Versioned preview ZIPs are unsigned first-install previews; do not describe them as Apple-notarized applications.
+
+The macOS workflow runs on pull requests as well as the existing main/test branches and manual dispatch. Both native architectures rebuild the compiler/VM/Node runtime and verify its provenance receipt against the bundled source and binary hashes. The native UI smoke report must explicitly pass AI verification, chat with a pending proposal, review markings, inline proposals, and Code-History checks. These AI checks use local mocks and the real local compiler; no paid OpenAI request is required. WebKit tests exercise the full browser regression suite.
+
+Signed packaging updates the receipt after Apple signing because signatures change native binary bytes; the pre-signing SHA-256 is retained. Native bundle smoke tests also reject wrong binary architectures and embedded personal build paths. CI uploads runtime receipts with its test evidence. macOS builds and native tests must run on the Mac runners; Windows syntax/unit checks do not establish macOS compatibility.

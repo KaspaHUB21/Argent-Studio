@@ -183,3 +183,22 @@ test('expanded structure cards retain their proportions and zoom when resizing b
  }
  await page.screenshot({path:'qa/structure-build-resize.png'});
 });
+
+test('AI selection explanation requires consent and atomic proposal update preserves edits',async({page})=>{
+ await page.evaluate(()=>{const a=window.__ARGENT_APP__;a.state.settings.aiEnabled=true;a.applySettings();const d=a.state.current;d.editor.view.dispatch({selection:{anchor:0,head:20}});d.codeHost.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:400,clientY:300}));});
+ await page.getByText('KI: Auswahl erklären',{exact:true}).click();await expect(page.locator('#status')).toContainText('Projektcode für KI freigeben');expect(await page.evaluate(()=>window.__FIXTURE_CALLS__.some(c=>c.command==='api_request'))).toBe(false);
+ const unchanged=await page.evaluate(()=>{const a=window.__ARGENT_APP__,d=a.state.current,before=d.text;a.context.updateDocument(d.path,before+'// user edit');let rejected=false;try{a.context.updateDocument(d.path,'AI replacement',before);}catch{rejected=true;}return rejected&&d.text===before+'// user edit';});expect(unchanged).toBe(true);
+});
+test('AI isolated verification receives unsaved project sources and never saves user files',async({page})=>{
+ await page.evaluate(()=>{const a=window.__ARGENT_APP__;a.state.settings.aiEnabled=true;a.state.panels.assistant=true;a.applySettings();const original=window.__ARGENT_TEST__.invoke;window.__ARGENT_TEST__.invoke=async(c,args)=>{if(c==='read_ai_file')return window.__FIXTURE_FILES__['C:/fixture/project/'+args.path]??null;if(c==='verify_ai_proposal'){window.__AI_VERIFY_ARGS__=args;return {success:true,compile:{success:true},tests:[]};}return original(c,args);};a.context.updateDocument(a.state.current.path,a.state.current.text+'// unsaved editor change');});
+ await page.locator('.ai-share input').check();const report=await page.evaluate(async()=>{const a=window.__ARGENT_APP__;const r=await a.context.verifyProposal({path:'tickets.ag',content:a.state.current.text+'// candidate'});return {success:r.success,args:window.__AI_VERIFY_ARGS__,writes:window.__FIXTURE_CALLS__.filter(c=>c.command==='write_file'),disk:window.__FIXTURE_FILES__['C:/fixture/project/tickets.ag'],fresh:await a.context.checkVerification(r)};});
+ expect(report.success).toBe(true);expect(report.fresh).toBe(true);expect(report.args.sources[0].content).toContain('// unsaved editor change// candidate');expect(report.disk).not.toContain('// unsaved');expect(report.writes).toHaveLength(0);
+});
+
+
+test('language preference updates document metadata in both directions',async({page})=>{
+ await page.evaluate(()=>{const app=window.__ARGENT_APP__;app.state.settings.language='en';app.applySettings();});
+ await expect(page.locator('html')).toHaveAttribute('lang','en');await expect(page).toHaveTitle('Argent Studio · Kaspa covenant editor');
+ await page.evaluate(()=>{const app=window.__ARGENT_APP__;app.state.settings.language='de';app.applySettings();});
+ await expect(page.locator('html')).toHaveAttribute('lang','de');await expect(page).toHaveTitle('Argent Studio · Kaspa-Covenant-Editor');
+});

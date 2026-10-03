@@ -10,6 +10,8 @@ const {
   PRIMITIVE_DOCUMENTATION,
   PRIMITIVE_TYPES,
   builtinCall,
+  buildModuleExports,
+  resolveSymbolPath,
   scanDocument,
   standardModuleRelativePath,
 } = require('./language-service');
@@ -29,6 +31,7 @@ const DECLARATION_COMPLETION_KIND = {
   delegate: vscode.CompletionItemKind.Method,
   entry: vscode.CompletionItemKind.Method,
   function: vscode.CompletionItemKind.Function,
+  module: vscode.CompletionItemKind.Module,
   state: vscode.CompletionItemKind.Struct,
 };
 
@@ -40,6 +43,7 @@ const DECLARATION_SEMANTIC_KIND = {
   delegate: 'function',
   entry: 'function',
   function: 'function',
+  module: 'namespace',
   state: 'type',
 };
 
@@ -115,7 +119,7 @@ class ArgentIndex {
         continue;
       }
 
-      modules.push({ uri, scan, local: key === rootKey });
+      modules.push({ key, uri, scan, local: key === rootKey, declarations: [], imports: [] });
       for (const imported of scan.imports) {
         const importedUri = this.resolveImport(uri, imported.path);
         if (importedUri) {
@@ -125,15 +129,11 @@ class ArgentIndex {
     }
 
     const declarations = [];
-    const byName = new Map();
-    const addDeclaration = (item) => {
-      declarations.push(item);
-      const matches = byName.get(item.name) ?? [];
-      matches.push(item);
-      byName.set(item.name, matches);
-    };
-
     for (const module of modules) {
+      module.imports = module.scan.imports.map((imported) => ({
+        alias: imported.alias,
+        targetKey: this.resolveImport(module.uri, imported.path)?.toString(),
+      }));
       for (const scanned of module.scan.declarations) {
         const enrichParameters = (parameters, callable, actor) =>
           parameters?.map((parameter) => ({
@@ -153,6 +153,7 @@ class ArgentIndex {
         const item = {
           ...scanned,
           uri: module.uri,
+          moduleKey: module.key,
           local: module.local,
           parameters: enrichParameters(scanned.parameters, scanned.name),
           members,
@@ -163,55 +164,26 @@ class ArgentIndex {
             state: scanned.name,
           })),
         };
-        addDeclaration(item);
+        module.declarations.push(item);
+        declarations.push(item);
         for (const member of members ?? []) {
-          addDeclaration(member);
+          declarations.push(member);
         }
       }
     }
 
-    return { rootDocument, modules, declarations, byName };
+    return { rootDocument, modules, declarations, exports: buildModuleExports(modules) };
   }
 }
 
-function preferredDeclaration(matches) {
-  if (!matches || matches.length === 0) {
-    return undefined;
-  }
-  return matches.find((candidate) => candidate.local) ?? matches[0];
-}
-
-function declarationsVisibleAt(catalog, uri, offset, matches) {
-  const actor = enclosingActor(catalog, uri, offset);
-  return (matches ?? []).filter(
-    (candidate) =>
-      candidate.kind !== 'function' ||
-      !candidate.actor ||
-      (actor && candidate.actor === actor.name && candidate.uri.toString() === actor.uri.toString()),
-  );
-}
-
-function preferredDeclarationAt(catalog, uri, offset, matches) {
-  return preferredDeclaration(declarationsVisibleAt(catalog, uri, offset, matches));
-}
-
-function declarationOfKind(catalog, name, kind) {
-  const matches = catalog.byName.get(name)?.filter((candidate) => candidate.kind === kind);
-  return preferredDeclaration(matches);
-}
-
-function fieldsForState(catalog, stateName, visiting = new Set()) {
-  if (!stateName || visiting.has(stateName)) {
+function fieldsForState(catalog, stateName, fromUri, visiting = new Set()) {
+  const state = stateName && resolveSymbolPath(catalog.exports, fromUri.toString(), stateName.split('::'));
+  if (state?.kind !== 'state' || visiting.has(state)) {
     return [];
   }
-  visiting.add(stateName);
+  visiting.add(state);
 
-  const state = declarationOfKind(catalog, stateName, 'state');
-  if (!state) {
-    return [];
-  }
-
-  const fields = fieldsForState(catalog, state.baseState, visiting);
+  const fields = fieldsForState(catalog, state.baseState, state.uri, visiting);
   const byName = new Map(fields.map((field) => [field.name, field]));
   for (const field of state.fields ?? []) {
     byName.set(field.name, field);
@@ -234,7 +206,7 @@ function enclosingActor(catalog, uri, offset) {
 
 function selfField(catalog, uri, offset, name) {
   const actor = enclosingActor(catalog, uri, offset);
-  return actor ? fieldsForState(catalog, actor.ownedState).find((field) => field.name === name) : undefined;
+  return actor ? fieldsForState(catalog, actor.ownedState, actor.uri).find((field) => field.name === name) : undefined;
 }
 
 function isCallable(declaration) {
@@ -287,6 +259,62 @@ function isSelfCompletion(document, position) {
   return /\bself\s*\.\s*[A-Za-z0-9_]*$/.test(line);
 }
 
+function referenceAt(catalog, uri, offset, tokenIndex) {
+  const key = uri.toString();
+  const current = catalog.modules.find((module) => module.key === key);
+  const tokens = current?.scan.tokens ?? [];
+  let index = tokenIndex ?? tokens.findIndex((token) => token.start === offset && token.kind === 'ident');
+  if (index < 0) {
+    return undefined;
+  }
+  const origin = index;
+  const name = tokens[index].value;
+  const segments = [name];
+  while (index >= 3 && tokens[index - 1].value === ':' && tokens[index - 2].value === ':' && tokens[index - 3].kind === 'ident') {
+    index -= 3;
+    segments.unshift(tokens[index].value);
+  }
+  const qualified = segments.length > 1 || (tokens[origin + 1]?.value === ':' && tokens[origin + 2]?.value === ':');
+  if (segments.length === 1) {
+    const declaration = current.declarations.find((item) => item.start === offset)
+      ?? current.declarations.flatMap((item) => item.members ?? []).find((item) => item.start === offset);
+    if (declaration) {
+      return { target: declaration, qualified };
+    }
+    const actor = enclosingActor(catalog, uri, offset);
+    const member = actor?.members?.find((item) => item.name === name && item.kind === 'function');
+    if (member) {
+      return { target: member, qualified };
+    }
+  }
+  return { target: resolveSymbolPath(catalog.exports, key, segments), qualified };
+}
+
+function namespaceSymbols(catalog, uri, source, offset) {
+  const prefix = source.slice(0, offset).match(/((?:[A-Za-z_][A-Za-z0-9_]*\s*::\s*)+)[A-Za-z0-9_]*$/);
+  if (!prefix) {
+    return undefined;
+  }
+  const segments = prefix[1].split(/\s*::\s*/).filter(Boolean);
+  const namespace = resolveSymbolPath(catalog.exports, uri.toString(), segments);
+  if (namespace?.kind === 'module') {
+    return catalog.exports.get(namespace.moduleKey) ?? new Map();
+  }
+  const symbols = new Map();
+  if (namespace?.kind === 'app') {
+    for (const actorPath of namespace.actors ?? []) {
+      const actor = resolveSymbolPath(catalog.exports, namespace.moduleKey, actorPath.split('::'));
+      if (actor?.kind === 'actor') {
+        const name = actorPath.split('::').at(-1);
+        const targets = symbols.get(name) ?? new Set();
+        targets.add(actor);
+        symbols.set(name, targets);
+      }
+    }
+  }
+  return symbols;
+}
+
 function relativePath(uri) {
   return vscode.workspace.asRelativePath(uri, false);
 }
@@ -305,10 +333,10 @@ function functionSnippet(name, params) {
   return new vscode.SnippetString(`${name}(${args})`);
 }
 
-function completionItems(catalog, actor) {
+function completionItems(catalog, actor, symbols, qualified = false) {
   const items = [];
 
-  for (const keyword of KEYWORDS) {
+  for (const keyword of qualified ? [] : KEYWORDS) {
     const item = new vscode.CompletionItem(keyword, vscode.CompletionItemKind.Keyword);
     item.detail = 'Argent keyword';
     if (KEYWORD_DOCUMENTATION[keyword]) {
@@ -318,7 +346,7 @@ function completionItems(catalog, actor) {
     items.push(item);
   }
 
-  for (const type of PRIMITIVE_TYPES) {
+  for (const type of qualified ? [] : PRIMITIVE_TYPES) {
     const item = new vscode.CompletionItem(type, vscode.CompletionItemKind.TypeParameter);
     item.detail = 'Argent primitive type';
     if (PRIMITIVE_DOCUMENTATION[type]) {
@@ -328,7 +356,7 @@ function completionItems(catalog, actor) {
     items.push(item);
   }
 
-  for (const builtin of BUILTINS) {
+  for (const builtin of qualified ? [] : BUILTINS) {
     const item = new vscode.CompletionItem(builtin.name, vscode.CompletionItemKind.Function);
     item.detail = builtin.signature;
     item.insertText = functionSnippet(builtin.name, builtin.params);
@@ -339,27 +367,24 @@ function completionItems(catalog, actor) {
     items.push(item);
   }
 
-  const seen = new Set();
-  for (const declaration of catalog.declarations) {
-    if (
-      declaration.kind === 'function' &&
-      declaration.actor &&
-      (!actor || declaration.actor !== actor.name || declaration.uri.toString() !== actor.uri.toString())
-    ) {
+  const visible = new Map(symbols);
+  if (!qualified) {
+    for (const member of actor?.members ?? []) {
+      visible.set(member.name, new Set([member]));
+    }
+  }
+  for (const [name, targets] of visible) {
+    if (targets.size !== 1) {
       continue;
     }
-    const key = `${declaration.kind}:${declaration.name}`;
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
+    const [declaration] = targets;
 
-    const item = new vscode.CompletionItem(declaration.name, DECLARATION_COMPLETION_KIND[declaration.kind]);
-    item.detail = `${declaration.signature} — ${relativePath(declaration.uri)}`;
+    const item = new vscode.CompletionItem(name, DECLARATION_COMPLETION_KIND[declaration.kind]);
+    item.detail = declaration.kind === 'module' ? 'module namespace' : `${declaration.signature} — ${relativePath(declaration.uri)}`;
     if (declaration.documentation) {
       item.documentation = new vscode.MarkdownString(declaration.documentation);
     }
-    item.sortText = `${declaration.local ? '0' : '1'}-${declaration.name}`;
+    item.sortText = `${declaration.local ? '0' : '1'}-${name}`;
     if (isCallable(declaration)) {
       item.insertText = functionSnippet(declaration.name, declaration.params);
     }
@@ -406,6 +431,11 @@ function wordAt(document, position) {
 
 function declarationHover(declaration) {
   const markdown = new vscode.MarkdownString();
+  if (declaration.kind === 'module') {
+    const uri = vscode.Uri.parse(declaration.moduleKey);
+    markdown.appendMarkdown(`Module \`${declaration.name}\` from \`${relativePath(uri)}\``);
+    return new vscode.Hover(markdown);
+  }
   markdown.appendCodeblock(declaration.signature, 'argent');
   if (declaration.documentation) {
     markdown.appendMarkdown(`\n\n${declaration.documentation}`);
@@ -433,6 +463,9 @@ function parameterHover(parameter) {
 }
 
 function declarationLocation(catalog, declaration) {
+  if (declaration.kind === 'module') {
+    return new vscode.Location(vscode.Uri.parse(declaration.moduleKey), new vscode.Position(0, 0));
+  }
   const module = catalog.modules.find((candidate) => candidate.uri.toString() === declaration.uri.toString());
   const start = module ? positionAt(module.scan.source, declaration.start) : new vscode.Position(0, 0);
   const end = module ? positionAt(module.scan.source, declaration.end) : start;
@@ -481,23 +514,27 @@ function activate(context) {
     vscode.languages.registerCompletionItemProvider(selector, {
       async provideCompletionItems(document, position) {
         const catalog = await index.collect(document);
+        const symbols = namespaceSymbols(catalog, document.uri, document.getText(), document.offsetAt(position));
+        if (symbols) {
+          return completionItems(catalog, undefined, symbols, true);
+        }
         if (isSelfCompletion(document, position)) {
           const actor = enclosingActor(catalog, document.uri, document.offsetAt(position));
           if (actor) {
-            return fieldCompletionItems(fieldsForState(catalog, actor.ownedState));
+            return fieldCompletionItems(fieldsForState(catalog, actor.ownedState, actor.uri));
           }
         }
         const callable = enclosingCallable(catalog, document.uri, document.offsetAt(position));
         const actor = enclosingActor(catalog, document.uri, document.offsetAt(position));
-        const fields = actor ? fieldCompletionItems(fieldsForState(catalog, actor.ownedState)) : [];
+        const fields = actor ? fieldCompletionItems(fieldsForState(catalog, actor.ownedState, actor.uri)) : [];
         return [
           ...parameterCompletionItems(callable?.parameters ?? []),
           ...clauseVariableCompletionItems(callable?.clauseVariables ?? [], callable?.name),
           ...fields,
-          ...completionItems(catalog, actor),
+          ...completionItems(catalog, actor, catalog.exports.get(document.uri.toString()) ?? new Map()),
         ];
       },
-    }, '.'),
+    }, '.', ':'),
     vscode.languages.registerDefinitionProvider(selector, {
       async provideDefinition(document, position) {
         const scan = scanDocument(document.getText());
@@ -519,20 +556,15 @@ function activate(context) {
             return declarationLocation(catalog, field);
           }
         }
-        const parameter = visibleParameter(catalog, document.uri, document.offsetAt(word.range.start), word.value);
+        const reference = referenceAt(catalog, document.uri, document.offsetAt(word.range.start));
+        const parameter = !reference?.qualified && visibleParameter(catalog, document.uri, document.offsetAt(word.range.start), word.value);
         if (parameter) {
           return declarationLocation(catalog, parameter);
         }
-        const matches = declarationsVisibleAt(
-          catalog,
-          document.uri,
-          document.offsetAt(word.range.start),
-          catalog.byName.get(word.value),
-        );
-        if (matches.length === 0) {
+        if (!reference?.target) {
           return undefined;
         }
-        return matches.map((declaration) => declarationLocation(catalog, declaration));
+        return declarationLocation(catalog, reference.target);
       },
     }),
     vscode.languages.registerHoverProvider(selector, {
@@ -550,7 +582,8 @@ function activate(context) {
           }
         }
 
-        const parameter = visibleParameter(catalog, document.uri, document.offsetAt(word.range.start), word.value);
+        const reference = referenceAt(catalog, document.uri, document.offsetAt(word.range.start));
+        const parameter = !reference?.qualified && visibleParameter(catalog, document.uri, document.offsetAt(word.range.start), word.value);
         if (parameter) {
           return parameterHover(parameter);
         }
@@ -572,13 +605,7 @@ function activate(context) {
           return new vscode.Hover(markdown, word.range);
         }
 
-        const declaration = preferredDeclarationAt(
-          catalog,
-          document.uri,
-          document.offsetAt(word.range.start),
-          catalog.byName.get(word.value),
-        );
-        return declaration ? declarationHover(declaration) : undefined;
+        return reference?.target ? declarationHover(reference.target) : undefined;
       },
     }),
     vscode.languages.registerDocumentLinkProvider(selector, {
@@ -636,9 +663,9 @@ function activate(context) {
             const referencedField = followsSelfDot(current.scan.source, token.start)
               ? selfField(catalog, document.uri, token.start, token.value)
               : undefined;
-            const referencedParameter = parameterInScope(catalog, document.uri, token.start, token.value);
-            const declaration =
-              localDeclaration ?? preferredDeclarationAt(catalog, document.uri, token.start, catalog.byName.get(token.value));
+            const reference = referenceAt(catalog, document.uri, token.start, tokenIndex);
+            const referencedParameter = !reference?.qualified && parameterInScope(catalog, document.uri, token.start, token.value);
+            const declaration = localDeclaration ?? reference?.target;
             let type;
             let modifiers = [];
 
@@ -650,7 +677,8 @@ function activate(context) {
               modifiers = localParameter ? ['declaration'] : [];
             } else if (declaration) {
               type = DECLARATION_SEMANTIC_KIND[declaration.kind];
-              modifiers = semanticModifiers(declaration, Boolean(localDeclaration));
+              const alias = current.scan.imports.some((item) => item.aliasStart === token.start);
+              modifiers = semanticModifiers(declaration, Boolean(localDeclaration || alias));
             } else if (PRIMITIVE_TYPES.includes(token.value)) {
               type = 'type';
               modifiers = ['defaultLibrary'];

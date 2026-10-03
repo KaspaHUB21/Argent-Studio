@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
+import {verifyMacRuntime} from './macos-runtime-integrity.mjs';
 if(process.platform!=='darwin')throw Error('Run this check on macOS.');
 const root=process.cwd(),reports=path.resolve('test-output/macos');fs.mkdirSync(reports,{recursive:true});
 const bundle=path.resolve('src-tauri/target/release/bundle/macos/Argent Studio.app');
@@ -10,14 +11,16 @@ const env={...process.env,ARGENT_PROJECTS_DIR:path.join(reports,'projects')};
 const summary={success:false,arch:process.arch,examples:[],backend:null,ui:null,errors:[]};
 function run(exe,args,label,runEnv=env){const r=spawnSync(exe,args,{env:runEnv,encoding:'utf8',timeout:180000,maxBuffer:8000000});fs.writeFileSync(path.join(reports,label+'.txt'),(r.stdout||'')+'\n'+(r.stderr||''));if(r.error||r.status!==0)throw Error(label+': '+(r.error?.message||r.stderr||'exit '+r.status));return r;}
 try{
- for(const file of [exe,path.join(resources,'bin/argentc'),path.join(resources,'bin/ArgentTestRunner-v1'),path.join(resources,'bin/runtime/node')]){fs.accessSync(file,fs.constants.X_OK);run('/usr/bin/file',[file],path.basename(file)+'-architecture');}
+ summary.runtime=verifyMacRuntime(resources);
+ run(process.execPath,['scripts/check-binary-paths.mjs',exe,path.join(resources,'bin/argentc'),path.join(resources,'bin/ArgentTestRunner-v1')],'binary-paths');
+ for(const file of [exe,path.join(resources,'bin/argentc'),path.join(resources,'bin/ArgentTestRunner-v1'),path.join(resources,'bin/runtime/node')]){fs.accessSync(file,fs.constants.X_OK);const architecture=run('/usr/bin/file',[file],path.basename(file)+'-architecture').stdout;if(!architecture.includes(process.arch==='arm64'?'arm64':'x86_64'))throw Error('Bundled binary architecture mismatch: '+file);}
  for(const [id,entry,app] of [['tickets','tickets.ag','Tickets'],['spawns','spawns.ag','Spawns'],['stones','app.ag','Stones'],['icc','minter.ag','KCC20MintController']]){
   const output=path.join(reports,'examples',id);fs.mkdirSync(output,{recursive:true});
   run(path.join(resources,'bin/argentc'),['build',path.join(resources,'examples/catalog',id,entry),'--app',app,'--out',output],'example-'+id);
   JSON.parse(fs.readFileSync(path.join(output,'artifact.json'),'utf8'));summary.examples.push({id,success:true});
  }
  for(const [name,mode,option] of [['backend','--smoke-test','--smoke-report'],['ui','--ui-smoke','--ui-smoke-report']]){
-  try {const report=path.join(reports,name+'.json');run(exe,[mode,option,report],name);summary[name]=JSON.parse(fs.readFileSync(report,'utf8'));if(!summary[name].success)throw Error(JSON.stringify(summary[name]));}
+  try {const report=path.join(reports,name+'.json');run(exe,[mode,option,report],name);summary[name]=JSON.parse(fs.readFileSync(report,'utf8'));if(!summary[name].success)throw Error(JSON.stringify(summary[name]));if(name==='ui')for(const check of ['aiVerificationChecked','pendingChatChecked','reviewMarkingChecked','inlineProposalChecked','codeHistoryChecked'])if(summary.ui[check]!==true)throw Error('Native feature check missing: '+check);}
   catch(e){summary.errors.push(name+': '+e.message);}
  }
  try {

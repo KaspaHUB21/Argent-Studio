@@ -1,4 +1,4 @@
-import {analyzeLive} from './live-analysis.js';
+import {analyzeLive,qualifiedLiveName} from './live-analysis.js';
 const MAX_IMPORTS=80,MAX_BYTES=2*1024*1024;
 const normalize=value=>{const p=String(value||'').replaceAll('\\','/'),prefix=p.startsWith('/')?'/':p.match(/^[A-Za-z]:\//)?.[0];if(!prefix||p.startsWith('//'))return null;const parts=[];for(const part of p.slice(prefix.length).split('/')){if(!part||part==='.')continue;if(part==='..'){if(!parts.length)return null;parts.pop();}else if(part.includes(':')||/[\0-\x1f]/.test(part))return null;else parts.push(part);}return prefix+parts.join('/');};
 const key=p=>/^[A-Za-z]:\//.test(p)?p.toLowerCase():p;
@@ -7,8 +7,8 @@ const parent=p=>p.slice(0,p.lastIndexOf('/'))||'/';
 function importsOf(source,analysis){
  const tokens=[...analysis.tokens,...analysis.ignored.filter(t=>t.value.startsWith('"'))].sort((a,b)=>a.from-b.from),imports=[];let depth=0;
  for(let i=0;i<tokens.length;i++){const t=tokens[i];if(t.value==='{')depth++;else if(t.value==='}')depth--;if(depth!==0||t.value!=='import')continue;
-  const actor=tokens[i+1]?.value==='actor',literal=tokens[i+(actor?4:1)],name=tokens[i+2];if(actor&&(name?.kind!=='name'||tokens[i+3]?.value!=='from'))continue;if(!literal?.value.startsWith('"')||tokens[i+(actor?5:2)]?.value!==';')continue;
-  try{const spec=JSON.parse(literal.value);if(typeof spec==='string')imports.push({specifier:spec,kind:actor?'actor':'module',name:actor?name.value:null,from:literal.from+1,to:literal.to-1,nameFrom:name?.from,nameTo:name?.to});}catch{}
+  const actor=tokens[i+1]?.value==='actor',literal=tokens[i+(actor?4:1)],name=tokens[i+2];if(actor&&(name?.kind!=='name'||tokens[i+3]?.value!=='from'))continue;const after=i+(actor?5:2),alias=!actor&&tokens[after]?.value==='as'&&tokens[after+1]?.kind==='name'?tokens[after+1]:null;if(!literal?.value.startsWith('"')||tokens[after+(alias?2:0)]?.value!==';')continue;
+  try{const spec=JSON.parse(literal.value);if(typeof spec==='string')imports.push({specifier:spec,kind:actor?'actor':'module',name:actor?name.value:null,alias:alias?.value,from:literal.from+1,to:literal.to-1,nameFrom:name?.from,nameTo:name?.to});}catch{}
  }
  return imports;
 }
@@ -21,7 +21,7 @@ function exportsOf(source,path,a){
    const callable=a.callables.find(c=>c.symbol.id===symbol.id);if(callable){const after=a.tokens[callable.end+1];if(after?.value==='-'&&a.tokens[callable.end+2]?.value==='>'){const end=body?body.from-1:after.to;out.returnType=source.slice(a.tokens[callable.end+2].to,end).trim().replace(/\s+/g,'');}}
   }
   if(kind==='state'){
-   out.baseState=a.tokens[tokenIndex+1]?.value==='expands'?a.tokens[tokenIndex+2]?.value:undefined;out.fields=[];
+   out.baseState=a.tokens[tokenIndex+1]?.value==='expands'?qualifiedLiveName(a.tokens,tokenIndex+2).name:undefined;out.fields=[];
    if(body){const fieldTokens=a.tokens.filter(t=>body.from<=t.from&&t.to<=body.to);let start=0;for(let i=0;i<fieldTokens.length;i++){if(fieldTokens[i].value!==';')continue;const chunk=fieldTokens.slice(start,i),last=chunk.at(-1);if(last?.kind==='name'&&chunk.length>=2)out.fields.push({name:last.value,type:source.slice(chunk[0].from,last.from).trim().replace(/\s+/g,''),from:last.from,to:last.to});start=i+1;}}
   }
   if(kind==='actor')out.owns=a.tokens[tokenIndex+1]?.value==='owns'?a.tokens[tokenIndex+2]?.value:undefined;
@@ -51,11 +51,16 @@ export async function inspectLiveProject({path,text,documents=[],root,files=[],i
    if(!available){const result=await read(imported,isStandard);if(result?.status!=='ok'||typeof result.text!=='string'){complete=false;if(result?.status==='missing'&&target===current)addDiagnostic(entry,'import-missing',`Importdatei „${entry.specifier}“ wurde nicht gefunden.`,`Import file '${entry.specifier}' was not found.`);continue;}available=await visit(imported,result.text,[...trail,id],entry);}
    if(entry.kind==='actor'){
     const found=available.filter(s=>s.name===entry.name&&s.kind==='actor');if(found.length===1)all.push(found[0]);else if(!found.length&&complete&&target===current&&!trail.includes(key(imported))){addDiagnostic({...entry,from:entry.nameFrom,to:entry.nameTo},'import-name',`Akteur „${entry.name}“ ist in diesem Import nicht definiert.`,`Actor '${entry.name}' is not defined in this import.`);complete=false;}
-   }else for(const s of available)if(!all.some(x=>x.path===s.path&&x.from===s.from))all.push(s);
+   }else if(entry.alias){
+    all.push({name:entry.alias,kind:'module',path:imported,from:0,to:0});
+    const names=new Set(available.map(s=>s.name));
+    const qualify=name=>names.has(name)?entry.alias+'::'+name:name;
+    for(const s of [...available])all.push({...s,name:qualify(s.name),baseState:qualify(s.baseState),owns:qualify(s.owns),fields:s.fields?.map(f=>({...f,type:qualify(f.type)})),params:s.params?.map(p=>({...p,type:qualify(p.type)})),returnType:qualify(s.returnType)});
+   }else for(const s of available)if(!all.some(x=>x.name===s.name&&x.path===s.path&&x.from===s.from))all.push(s);
   }
   return all;
  }
  const initial=analyzeLive(text),hasImports=importsOf(text,initial).length>0;
- const all=await visit(current,text,[],null);for(const s of all)if(key(s.path)!==key(current)&&!symbols.some(x=>x.path===s.path&&x.from===s.from))symbols.push(s);
+ const all=await visit(current,text,[],null);for(const s of all)if(key(s.path)!==key(current)&&!symbols.some(x=>x.name===s.name&&x.path===s.path&&x.from===s.from))symbols.push(s);
  return {diagnostics,symbols,complete,hasImports};
 }

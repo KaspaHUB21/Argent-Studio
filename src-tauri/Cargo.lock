@@ -58,7 +58,7 @@ dependencies = [
 
 [[package]]
 name = "argent-studio-tauri"
-version = "0.45.12"
+version = "0.45.13"
 dependencies = [
  "keyring",
  "libc",

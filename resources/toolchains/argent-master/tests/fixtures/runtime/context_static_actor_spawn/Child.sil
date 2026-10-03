@@ -53,6 +53,18 @@ contract Child(
     }
 
     // :: leader entry (1:N)
+    entry discard() {
+        // :: zero-minimum entry must lead its covenant group (rule 6)
+        byte[32] gen__cov_id = OpInputCovenantId(this.activeInputIndex);
+        require(OpCovInputIdx(gen__cov_id, 0) == this.activeInputIndex);
+
+        // :: auth outputs
+        require(OpAuthOutputCount(this.activeInputIndex) == 0);
+
+        require(1 == 1);
+    }
+
+    // :: leader entry (1:N)
     entry return_to_launcher(byte[] gen__launcher_prefix, byte[] gen__launcher_suffix) {
         // :: auth outputs
         require(OpAuthOutputCount(this.activeInputIndex) == 1);

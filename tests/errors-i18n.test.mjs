@@ -23,3 +23,16 @@ test('macOS filesystem errors support both language directions',()=>{
   const german=localizeError(message,'de');assert.notEqual(german,message);assert.equal(localizeError(german,'en'),message);
  }
 });
+
+
+test('history and isolated verification errors translate without changing remote diagnostics',()=>{
+ for(const message of ['History entry no longer available','Code history snapshot exceeds 640 KB','Verification cancelled','At most 8 verification scenarios are allowed','Isolated verification unavailable.','Mandatory reviewer challenge incomplete; request budget exhausted or reviewer failed.']){
+  const german=localizeError(message,'de');assert.notEqual(german,message);assert.equal(localizeError(german,'en'),message);
+ }
+ for(const message of ['OpenAI HTTP 429: Your account is not active, please check your billing details on our website','tickets.ag:7: parser error','Disk full'])assert.equal(localizeError(message,'de'),message);
+});
+
+
+test('owned diagnostic prefixes retain exact source names and paths',()=>{
+ for(const message of ['Source file no longer exists: Transaktion/tickets.ag','Snapshot import is missing: Nachher.ag']){const german=localizeError(message,'de');assert.notEqual(german,message);assert.equal(localizeError(german,'en'),message);assert.ok(german.endsWith(message.split(': ')[1]));}
+});

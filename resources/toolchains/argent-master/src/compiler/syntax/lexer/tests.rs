@@ -23,7 +23,12 @@ fn reports_unterminated_block_comment_location() {
 
 #[test]
 fn rejects_reserved_generated_namespace_identifier() {
-    for source in ["state gen__state {}", "state Gen__State {}"] {
+    for source in [
+        "state gen__state {}",
+        "state Gen__State {}",
+        "const int gen__module__1__LIMIT = 2;",
+        "fn total() -> int { int gen__module__1__LIMIT = 9; return gen__module__1__LIMIT; }",
+    ] {
         let err = lex_argent_source(source).expect_err("reserved generated namespace must be rejected");
         assert!(err.to_string().contains("reserved generated namespace"), "unexpected error: {err}");
     }

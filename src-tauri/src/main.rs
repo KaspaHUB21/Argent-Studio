@@ -3,6 +3,9 @@
 mod update_verification;
 use std::{collections::HashMap, path::{Path, PathBuf}, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}}, time::{Duration, SystemTime, UNIX_EPOCH}};
 mod ai_files;
+mod ai_verification;
+mod code_history;
+use ai_verification::verify_ai_proposal;
 mod file_move;
 use ai_files::read_ai_file;
 use serde::Serialize;
@@ -28,6 +31,18 @@ fn resources(app:&tauri::AppHandle)->PathBuf {
     app.path().resource_dir().unwrap_or_default().join("resources")
 }
 fn data(app:&tauri::AppHandle)->Result<PathBuf,String> {let p=app.path().app_data_dir().map_err(err)?; std::fs::create_dir_all(&p).map_err(err)?; Ok(p)}
+fn history_data(app:&tauri::AppHandle)->Result<PathBuf,String>{
+    let args:Vec<String>=std::env::args().collect();
+    if args.iter().any(|a|a=="--ui-smoke"){
+        let report=args.iter().position(|a|a=="--ui-smoke-report").and_then(|i|args.get(i+1)).map(PathBuf::from).ok_or("History smoke report path missing")?;
+        let root=report.parent().ok_or("History smoke report directory missing")?.join("history-profile");std::fs::create_dir_all(&root).map_err(err)?;return Ok(root);
+    }
+    data(app)
+}
+#[tauri::command] fn list_code_history(app:tauri::AppHandle,project_root:String,path:String)->Result<Vec<code_history::HistoryEntry>,String>{code_history::list(&history_data(&app)?,&project_root,&path)}
+#[tauri::command] fn checkpoint_code_history(app:tauri::AppHandle,project_root:String,path:String,text:String,reason:String)->Result<Vec<code_history::HistoryEntry>,String>{code_history::checkpoint(&history_data(&app)?,&project_root,&path,&text,&reason)}
+#[tauri::command] fn read_code_history(app:tauri::AppHandle,project_root:String,path:String,id:String)->Result<String,String>{code_history::read(&history_data(&app)?,&project_root,&path,&id)}
+
 const EXAMPLES:[(&str,&str,&str);4]=[("tickets","tickets.ag","Tickets"),("spawns","spawns.ag","Spawns"),("stones","app.ag","Stones"),("icc","minter.ag","KCC20MintController")];
 fn portable_projects_root(exe:&Path)->Result<PathBuf,String>{
     let parent=exe.parent().ok_or("Executable folder missing")?;
@@ -125,9 +140,11 @@ fn entries(path:&Path)->Result<Vec<FileEntry>,String>{
 #[tauri::command] fn create_directory(path:String)->Result<(),String>{write_allowed(Path::new(&path))?;if let Some(parent)=Path::new(&path).parent(){std::fs::create_dir_all(parent).map_err(err)?;}std::fs::create_dir(path).map_err(err)}
 fn credential(kind:&str)->Result<keyring::Entry,String>{if !["api","admin"].contains(&kind){return Err("Unknown credential kind".into());}keyring::Entry::new("Argent Studio Tauri",kind).map_err(err)}
 #[tauri::command] fn set_secret(kind:String,value:String)->Result<(),String>{let entry=credential(&kind)?;if value.trim().is_empty(){match entry.delete_credential(){Ok(_)|Err(keyring::Error::NoEntry)=>Ok(()),Err(e)=>Err(err(e))}}else{entry.set_password(value.trim()).map_err(err)}}
+fn settings_defaults()->Value {json!({"language":"de","model":"gpt-6.1-sol","reasoningEffort":"max","maxOutputTokens":32768,"maxRequests":8,"darkMode":false,"wordWrap":false,"aiHover":false,"aiEnabled":false,"aiTeamEnabled":true})}
+fn merge_settings(saved:Value)->Value {let mut value=settings_defaults();if let Some(map)=saved.as_object(){for(k,v)in map{value[k]=v.clone();}}if value["model"]=="gpt-6-astra"{value["model"]=json!("gpt-6.1-sol");}value}
 #[tauri::command] fn load_settings(app:tauri::AppHandle)->Result<Value,String>{
-    let mut value=json!({"language":"de","model":"gpt-6-astra","reasoningEffort":"max","maxOutputTokens":32768,"maxRequests":8,"darkMode":false,"wordWrap":false,"aiHover":false,"aiEnabled":false});
-    let p=data(&app)?.join("settings.json");if p.exists(){let saved:Value=serde_json::from_str(&std::fs::read_to_string(p).map_err(err)?).map_err(err)?;if let Some(map)=saved.as_object(){for(k,v)in map{value[k]=v.clone();}}}
+    let mut value=settings_defaults();
+    let p=data(&app)?.join("settings.json");if p.exists(){let saved:Value=serde_json::from_str(&std::fs::read_to_string(p).map_err(err)?).map_err(err)?;value=merge_settings(saved);}
     value["hasApiKey"]=json!(credential("api")?.get_password().is_ok());value["hasAdminKey"]=json!(credential("admin")?.get_password().is_ok());Ok(value)
 }
 #[tauri::command] fn save_settings(app:tauri::AppHandle,mut settings:Value)->Result<(),String>{
@@ -178,8 +195,16 @@ async fn process(app:&tauri::AppHandle,exe:PathBuf,args:Vec<String>,cwd:Option<P
     tokio::pin!(future);let result=loop{tokio::select!{result=&mut future=>break result,_=tokio::time::sleep(Duration::from_millis(100))=>{if cancel.load(Ordering::Relaxed){break Err("Request cancelled".into());}}}};app.state::<Operations>().api.lock().map_err(err)?.remove(&id);result
 }
 #[tauri::command] fn cancel_api(app:tauri::AppHandle,request_id:String)->Result<(),String>{if let Some(c)=app.state::<Operations>().api.lock().map_err(err)?.get(&request_id){c.store(true,Ordering::Relaxed);}Ok(())}
-#[tauri::command] fn list_examples(app:tauri::AppHandle)->Result<Value,String>{Ok(json!([{"id":"tickets","title":"Tickets – Einstieg","entry":"tickets.ag","app":"Tickets","path":resources(&app).join("examples/catalog/tickets")},{"id":"spawns","title":"Spawns – Covenants erzeugen","entry":"spawns.ag","app":"Spawns","path":resources(&app).join("examples/catalog/spawns")},{"id":"stones","title":"Stones – mehrere Akteure","entry":"app.ag","app":"Stones","path":resources(&app).join("examples/catalog/stones")},{"id":"icc","title":"ICC – Kommunikation zwischen Apps","entry":"minter.ag","app":"KCC20MintController","path":resources(&app).join("examples/catalog/icc")}]))}
-#[tauri::command] fn read_reference(app:tauri::AppHandle)->Result<String,String>{let root=resources(&app);for p in [root.join("README.md"),root.join("toolchains/argent-master/docs/language-reference.md")]{if p.exists(){return std::fs::read_to_string(p).map_err(err);}}Err("Reference document missing".into())}
+#[tauri::command] fn list_examples(app:tauri::AppHandle,language:Option<String>)->Result<Value,String>{let en=language.as_deref()==Some("en");Ok(json!([{"id":"tickets","title":if en {"Tickets – introduction"}else{"Tickets – Einstieg"},"entry":"tickets.ag","app":"Tickets","path":resources(&app).join("examples/catalog/tickets")},{"id":"spawns","title":if en {"Spawns – create covenants"}else{"Spawns – Covenants erzeugen"},"entry":"spawns.ag","app":"Spawns","path":resources(&app).join("examples/catalog/spawns")},{"id":"stones","title":if en {"Stones – multiple actors"}else{"Stones – mehrere Akteure"},"entry":"app.ag","app":"Stones","path":resources(&app).join("examples/catalog/stones")},{"id":"icc","title":if en {"ICC – communication between apps"}else{"ICC – Kommunikation zwischen Apps"},"entry":"minter.ag","app":"KCC20MintController","path":resources(&app).join("examples/catalog/icc")}]))}
+fn language_reference(root:&Path)->Result<String,String>{
+    let paths=["toolchains/argent-master/docs/language-reference.md","docs/language-reference.md","toolchains/argent-master/README.md","toolchains/argent-master/docs/security-invariants/README.md","toolchains/argent-master/docs/security-invariants/template-frame-identity.md",
+        "toolchains/argent-master/docs/security-invariants/leader-delegate-input-groups.md","toolchains/argent-master/docs/icc-semantics.md","toolchains/argent-master/docs/argent-design.md"];
+    let mut output=String::from("Pinned Argent language reference. Compiler validation remains authoritative.\n");
+    let mut found=false;
+    for relative in paths {let path=root.join(relative);if !path.is_file(){continue;}let remaining=160_000usize.saturating_sub(output.len());if remaining<256{break;}use std::io::Read;let mut bytes=Vec::new();std::fs::File::open(path).map_err(err)?.take(remaining.saturating_sub(relative.len()+8) as u64).read_to_end(&mut bytes).map_err(err)?;output.push_str(&format!("\n## {relative}\n"));output.push_str(&String::from_utf8_lossy(&bytes));found=true;}
+    if found{Ok(output)}else{Err("Argent language reference document missing".into())}
+}
+#[tauri::command] fn read_reference(app:tauri::AppHandle)->Result<String,String>{language_reference(&resources(&app))}
 #[tauri::command] fn toolchain_status(app:tauri::AppHandle)->Value{json!({"compiler":compiler_path(&app,None).ok(),"node":executable(&app,"node"),"testRunner":executable(&app,"ArgentTestRunner-v1").or_else(||executable(&app,"argent-test-runner")),"platform":std::env::consts::OS})}
 #[tauri::command] async fn toolchain_verify(app:tauri::AppHandle)->Result<RunResult,String>{process(&app,compiler_path(&app,None)?,vec![],None,None,20).await}
 #[tauri::command] fn open_external(url:String)->Result<(),String>{if url!="https://platform.openai.com/settings/organization/billing/overview" {return Err("Unsupported external URL".into());}
@@ -188,7 +213,7 @@ async fn process(app:&tauri::AppHandle,exe:PathBuf,args:Vec<String>,cwd:Option<P
     #[cfg(target_os="linux")] {std::process::Command::new("xdg-open").arg(&url).spawn().map_err(err)?;}
     Ok(())
 }
-fn main(){tauri::Builder::default().manage(Operations::default()).manage(ExitGuard::default()).plugin(tauri_plugin_dialog::init()).on_page_load(|webview,payload| { if webview.label()=="main" && std::env::args().any(|a|a=="--ui-smoke") && matches!(payload.event(),tauri::webview::PageLoadEvent::Finished) { #[cfg(feature="ci-update-test")] if std::env::args().any(|a|a=="--ui-update-check"){let _=webview.eval("window.__ARGENT_NATIVE_UPDATE_TEST__=true;");} #[cfg(feature="ci-update-test")] if std::env::args().any(|a|a=="--ui-exit-check"){let _=webview.eval("window.__ARGENT_NATIVE_EXIT_TEST__=true;");} let _=webview.eval(UI_SMOKE_SCRIPT); } }).setup(|app| { #[cfg(any(windows, target_os="macos"))] app.handle().plugin(tauri_plugin_updater::Builder::new().build())?; #[cfg(any(windows, target_os="macos"))] if std::env::args().any(|a|a=="--verify-update"){if let Some(window)=app.get_webview_window("main"){let _=window.hide();}update_verification::start(app.handle());} if std::env::args().any(|a|a=="--ui-smoke") { let handle=app.handle().clone(); tauri::async_runtime::spawn(async move {tokio::time::sleep(Duration::from_secs(60)).await;let _=record_ui_smoke(handle,json!({"success":false,"error":"Native UI smoke exceeded 60 seconds; page/IPC initialization did not finish"}));}); } if std::env::args().any(|a|a=="--smoke-test") { if let Some(window)=app.get_webview_window("main"){let _=window.hide();} let handle=app.handle().clone(); tauri::async_runtime::spawn(async move {let result=native_smoke(handle.clone()).await;let ok=result.is_ok();let report=match result{Ok(v)=>v,Err(e)=>json!({"success":false,"error":e})};let args:Vec<String>=std::env::args().collect();let target=args.iter().position(|a|a=="--smoke-report").and_then(|i|args.get(i+1)).map(PathBuf::from).unwrap_or_else(||std::env::temp_dir().join("argent-studio/native-smoke.json"));if write_allowed(&target).is_ok(){if let Some(parent)=target.parent(){let _=std::fs::create_dir_all(parent);}let _=std::fs::write(target,serde_json::to_vec_pretty(&report).unwrap_or_default());}handle.exit(if ok{0}else{1});}); } Ok(()) }).invoke_handler(tauri::generate_handler![app_info,list_directory,read_file,read_ai_file,write_file,create_directory,load_settings,save_settings,set_secret,build,inspect,cancel_operation,language_request,run_scenario,run_scenario_json,api_request,cancel_api,list_examples,open_example,duplicate_project,cleanup_builds,clone_example,trash_file,create_file,read_reference,toolchain_status,toolchain_verify,toolchain_updates,open_external,record_ui_smoke,exit_handler_ready,confirm_exit,test_request_exit]).build(tauri::generate_context!()).expect("Unable to start Argent Studio").run(|_app,_event| {
+fn main(){tauri::Builder::default().manage(Operations::default()).manage(ExitGuard::default()).plugin(tauri_plugin_dialog::init()).on_page_load(|webview,payload| { if webview.label()=="main" && std::env::args().any(|a|a=="--ui-smoke") && matches!(payload.event(),tauri::webview::PageLoadEvent::Finished) { #[cfg(feature="ci-update-test")] if std::env::args().any(|a|a=="--ui-update-check"){let _=webview.eval("window.__ARGENT_NATIVE_UPDATE_TEST__=true;");} #[cfg(feature="ci-update-test")] if std::env::args().any(|a|a=="--ui-exit-check"){let _=webview.eval("window.__ARGENT_NATIVE_EXIT_TEST__=true;");} let _=webview.eval(UI_SMOKE_SCRIPT); } }).setup(|app| { #[cfg(any(windows, target_os="macos"))] app.handle().plugin(tauri_plugin_updater::Builder::new().build())?; #[cfg(any(windows, target_os="macos"))] if std::env::args().any(|a|a=="--verify-update"){if let Some(window)=app.get_webview_window("main"){let _=window.hide();}update_verification::start(app.handle());} if std::env::args().any(|a|a=="--ui-smoke") { let handle=app.handle().clone(); tauri::async_runtime::spawn(async move {tokio::time::sleep(Duration::from_secs(60)).await;let _=record_ui_smoke(handle,json!({"success":false,"error":"Native UI smoke exceeded 60 seconds; page/IPC initialization did not finish"}));}); } if std::env::args().any(|a|a=="--smoke-test") { if let Some(window)=app.get_webview_window("main"){let _=window.hide();} let handle=app.handle().clone(); tauri::async_runtime::spawn(async move {let result=native_smoke(handle.clone()).await;let ok=result.is_ok();let report=match result{Ok(v)=>v,Err(e)=>json!({"success":false,"error":e})};let args:Vec<String>=std::env::args().collect();let target=args.iter().position(|a|a=="--smoke-report").and_then(|i|args.get(i+1)).map(PathBuf::from).unwrap_or_else(||std::env::temp_dir().join("argent-studio/native-smoke.json"));if write_allowed(&target).is_ok(){if let Some(parent)=target.parent(){let _=std::fs::create_dir_all(parent);}let _=std::fs::write(target,serde_json::to_vec_pretty(&report).unwrap_or_default());}handle.exit(if ok{0}else{1});}); } Ok(()) }).invoke_handler(tauri::generate_handler![list_code_history,checkpoint_code_history,read_code_history,app_info,list_directory,read_file,read_ai_file,write_file,create_directory,load_settings,save_settings,set_secret,build,inspect,cancel_operation,language_request,run_scenario,run_scenario_json,verify_ai_proposal,api_request,cancel_api,list_examples,open_example,duplicate_project,cleanup_builds,clone_example,trash_file,create_file,read_reference,toolchain_status,toolchain_verify,toolchain_updates,open_external,record_ui_smoke,exit_handler_ready,confirm_exit,test_request_exit]).build(tauri::generate_context!()).expect("Unable to start Argent Studio").run(|_app,_event| {
     #[cfg(target_os="macos")]
     if let tauri::RunEvent::ExitRequested{api,..}=_event {
         let guard=_app.state::<ExitGuard>();
@@ -202,6 +227,8 @@ fn main(){tauri::Builder::default().manage(Operations::default()).manage(ExitGua
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test] fn settings_migrate_only_the_previous_default_model(){let defaults=merge_settings(json!({}));assert_eq!(defaults["model"],"gpt-6.1-sol");assert_eq!(defaults["aiTeamEnabled"],true);assert_eq!(defaults["aiEnabled"],false);let migrated=merge_settings(json!({"model":"gpt-6-astra","aiEnabled":true,"editorZoom":130}));assert_eq!(migrated["model"],"gpt-6.1-sol");assert_eq!(migrated["editorZoom"],130);assert_eq!(migrated["aiEnabled"],true);assert_eq!(merge_settings(json!({"model":"custom-model","aiTeamEnabled":false}))["model"],"custom-model");assert_eq!(merge_settings(json!({"aiTeamEnabled":false}))["aiTeamEnabled"],false);}
+    #[test] fn reference_prefers_language_documents_over_studio_instructions(){let t=tempfile::tempdir().unwrap();std::fs::write(t.path().join("README.md"),"STUDIO INSTRUCTIONS").unwrap();std::fs::create_dir_all(t.path().join("docs")).unwrap();std::fs::write(t.path().join("docs/language-reference.md"),"LANGUAGE RULES").unwrap();let reference=language_reference(t.path()).unwrap();assert!(reference.contains("LANGUAGE RULES"));assert!(!reference.contains("STUDIO INSTRUCTIONS"));}
     #[test] fn project_duplicate_preserves_sources_and_excludes_generated_files(){
         let sandbox=tempfile::tempdir().unwrap();let source=sandbox.path().join("source");let projects=sandbox.path().join("projects");std::fs::create_dir(&source).unwrap();std::fs::create_dir(&projects).unwrap();
         std::fs::write(source.join("tickets.ag"),"user changes").unwrap();std::fs::write(source.join(".gitignore"),"build/").unwrap();
@@ -332,6 +359,70 @@ const UI_SMOKE_SCRIPT:&str=r#"
   const app=window.__ARGENT_APP__;if(!document.querySelector('.cm-editor'))throw Error('CodeMirror editor missing');
   const current=app.state.current;if(!current.text?.length)throw Error('Initial example source is empty');
   const result=await app.context.build();if(!result?.success)throw Error('Actual UI-to-Rust build failed: '+JSON.stringify(result));
+  let aiVerificationChecked=false;
+  const aiShare=document.querySelector('.ai-share input');if(!aiShare)throw Error('AI sharing control missing');
+  const aiEnabled=app.state.settings.aiEnabled,hasAdminKey=app.state.settings.hasAdminKey,shared=aiShare.checked;
+  try{
+   app.state.settings.aiEnabled=true;app.state.settings.hasAdminKey=false;aiShare.checked=true;
+   const beforeText=current.text,beforeDisk=await invoke('read_file',{path:current.path});
+   const normalizedRoot=app.state.root.replaceAll('\\','/').replace(/\/$/,''),normalizedPath=current.path.replaceAll('\\','/');
+   const relativePath=normalizedPath.slice(normalizedRoot.length+1);
+   const verification=await app.context.verifyProposal({path:relativePath,content:beforeText+'\n// isolated AI smoke\n',scenarios:[]});
+   if(!verification?.success||!verification?.compile?.success||!await app.context.checkVerification(verification))throw Error('Native isolated AI verification failed: '+JSON.stringify(verification));
+   if(current.text!==beforeText||current.editor.view.state.doc.toString()!==beforeText||await invoke('read_file',{path:current.path})!==beforeDisk)throw Error('Isolated AI verification changed source');
+   aiVerificationChecked=true;
+  }finally{app.state.settings.aiEnabled=aiEnabled;app.state.settings.hasAdminKey=hasAdminKey;aiShare.checked=shared;}
+
+
+
+  const pendingSettings={...app.state.settings},pendingShare=aiShare.checked,pendingInvoke=app.context.invoke;
+  let pendingChatChecked=false;
+  try{
+   let calls=0;const original=current.text,preview=original+'\n// unapplied rejected preview\n';
+   const rootPath=app.state.root.replaceAll('\\','/').replace(/\/$/,''),rel=current.path.replaceAll('\\','/').slice(rootPath.length+1);
+   app.context.invoke=async(command,args)=>{if(command!=='api_request')return pendingInvoke(command,args);calls++;
+    if(calls===1)return {status:'completed',output:[{type:'function_call',name:'propose_file',arguments:JSON.stringify({path:rel,content:preview}),call_id:'native-pending-proposal'}]};
+    if(calls===2)return {status:'completed',output:[{type:'function_call',name:'approve_proposal',arguments:JSON.stringify({decision:'reject',reason:'Native fixture requires further tests before release.'}),call_id:'native-pending-reject'}]};
+    if(calls===4&&!args.body.input.some(item=>item.role==='user'&&String(item.content).includes('PENDING UNAPPLIED PREVIEW')))throw Error('Pending preview missing from follow-up context');
+    return {status:'completed',output:[{type:'message',content:[{text:calls===4?'The pending preview can be discussed without applying.':'Further local tests required.'}]}]};
+   };
+   app.state.settings={...app.state.settings,aiEnabled:true,aiTeamEnabled:false,hasAdminKey:false,maxRequests:8};aiShare.checked=true;app.applySettings();
+   await app.assistant.requestChange('Create an isolated preview for the native dialog check.');
+   if(calls!==3||current.text!==original)throw Error('Native pending proposal setup failed');
+   await app.assistant.requestChange('Why was the candidate declined?');
+   if(calls!==4||current.text!==original)throw Error('Rejected proposal still blocked the conversation or changed source');
+   if(await invoke('read_file',{path:current.path})!==current.diskText)throw Error('Pending conversation wrote project disk');
+   pendingChatChecked=true;
+  }finally{app.context.invoke=pendingInvoke;app.assistant.projectChanged();app.state.settings=pendingSettings;aiShare.checked=pendingShare;app.applySettings();}
+  const reviewText=current.text;
+  if(!app.context.markReview({path:current.path,before:reviewText,findings:[{startLine:1,endLine:2,title:'Native review display check',message:'Read-only markers preserve the source.'}]}))throw Error('Native review markers rejected');
+  await wait(()=>document.querySelector('.cm-review-marker'),'Native review marker missing');document.querySelector('.cm-review-marker').click();
+  await wait(()=>document.querySelector('.cm-review-tooltip'),'Native review tooltip missing');
+  if(!document.querySelector('.cm-review-tooltip').textContent.includes('Native review display check'))throw Error('Native review note content missing');
+  if(current.text!==reviewText)throw Error('Read-only review changed source');app.context.clearReviews();
+  await wait(()=>!document.querySelector('.cm-review-tooltip'),'Review tooltip remained after clearing');
+  const reviewMarkingChecked=true;
+  const historyOriginal=current.text,historyDisk=await invoke('read_file',{path:current.path});
+  await app.codeHistory.checkpoint(current,'opened');
+  const suggested=historyOriginal+'\n// inline editor native check\n';
+  const normalizedRoot=app.state.root.replaceAll('\\','/').replace(/\/$/,''),normalizedPath=current.path.replaceAll('\\','/');
+  const relativePath=normalizedPath.slice(normalizedRoot.length+1);
+  const inlineAccepted=app.context.showProposal({path:current.path,before:historyOriginal,after:suggested,ready:true,busy:false,message:'Native local UI check',onApply:()=>app.context.updateDocument(current.path,suggested,historyOriginal,'ai'),onDiscard:()=>app.context.clearProposal()});
+  if(!inlineAccepted)throw Error('Inline proposal not displayed');
+  await wait(()=>document.querySelector('.cm-ai-marker'),'Inline AI marker missing');document.querySelector('.cm-ai-marker').click();
+  await wait(()=>document.querySelector('.cm-ai-tooltip'),'Inline comparison missing');
+  const inlineButton=[...document.querySelectorAll('.cm-ai-tooltip button')].find(b=>['Alle Änderungen übernehmen','Apply all changes'].includes(b.textContent));
+  if(!inlineButton||inlineButton.disabled)throw Error('Inline proposal Apply unavailable');inlineButton.click();
+  await wait(()=>current.text===suggested,'Inline proposal was not applied');app.context.clearProposal();
+  await app.codeHistory.flush();await app.codeHistory.open(current);
+  await wait(()=>document.querySelectorAll('.code-history-entry').length>=2,'Native code history entries missing');
+  const entries=await invoke('list_code_history',{projectRoot:app.state.root,path:relativePath});
+  let originalIndex=-1;for(let i=0;i<entries.length;i++){const text=await invoke('read_code_history',{projectRoot:app.state.root,path:relativePath,id:entries[i].id});if(text===historyOriginal){originalIndex=i;break;}}
+  if(originalIndex<0)throw Error('Original snapshot missing from history');document.querySelectorAll('.code-history-entry')[originalIndex].click();
+  await wait(()=>!document.querySelector('.code-history-restore')?.disabled,'History restore not ready');document.querySelector('.code-history-restore').click();
+  await wait(()=>current.text===historyOriginal&&!document.querySelector('.code-history-dialog'),'Native code history restore failed');
+  if(await invoke('read_file',{path:current.path})!==historyDisk)throw Error('Inline review/history wrote project disk');
+  const inlineProposalChecked=true,codeHistoryChecked=true;
   app.setView('structure');await wait(()=>document.querySelectorAll('.structure-card').length>0,'Structure cards did not render');
   const versionVisible=document.querySelector('#app-version')?.textContent==='v'+app.state.info.version;if(!versionVisible)throw Error('Visible version mismatch');
   const previousZoom=app.state.settings.editorZoom||100;
@@ -345,7 +436,7 @@ const UI_SMOKE_SCRIPT:&str=r#"
   app.context.updateDocument(current.path,originalText);await app.context.setSettings({...app.state.settings,editorZoom:previousZoom});
   const detachedWindowChecked=true;
   let updaterIpcChecked=false;if(window.__ARGENT_NATIVE_UPDATE_TEST__){const update=await invoke("plugin:updater|check",{timeout:10000});if(update?.version!=="99.0.0")throw Error("Native updater IPC returned no test update");updaterIpcChecked=true;}
-  const report={success:true,versionVisible,detachedWindowChecked,updaterIpcChecked,url:location.href,document:current.path,editorPresent:true,buildSuccess:result.success,buildOutput:result.output,artifactFiles:result.files.length,structureCards:document.querySelectorAll('.structure-card').length,status:document.querySelector('#status')?.textContent,errors};
+  const report={success:true,pendingChatChecked,reviewMarkingChecked,inlineProposalChecked,codeHistoryChecked,versionVisible,detachedWindowChecked,updaterIpcChecked,aiVerificationChecked,url:location.href,document:current.path,editorPresent:true,buildSuccess:result.success,buildOutput:result.output,artifactFiles:result.files.length,structureCards:document.querySelectorAll('.structure-card').length,status:document.querySelector('#status')?.textContent,errors};
   if(errors.length)throw Error(errors.join("; "));
   if(window.__ARGENT_NATIVE_EXIT_TEST__){
    current.editor.view.dispatch({changes:{from:current.editor.view.state.doc.length,insert:"\n// native quit saved"}});

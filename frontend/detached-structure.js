@@ -22,7 +22,7 @@ const peer=createWindowPeer(query.get('channel'),async(action,value)=>{
  if(action==='prepareDock'){locked=true;await queue;if(conflicts.size){locked=false;showConflict();return {ok:false};}return {ok:true,viewState:structure?.getViewState()};}
 },{native:!browser,target:'main',self:'structure'});
 function apply(value){
- data=value;
+ data=value;document.documentElement.lang=data.settings?.language==='en'?'en':'de';document.title=t('Argent Studio · Struktur','Argent Studio · Structure');
  document.documentElement.dataset.theme=data.settings.darkMode?'dark':'light';document.body.classList.toggle('dark',!!data.settings.darkMode);
  title.textContent=t('Struktur','Structure')+' · '+(data.path?.split(/[\\/]/).pop()||'');version.textContent=data.version?'v'+data.version:'';if(nativeWindow){const next='Argent Studio · '+title.textContent;if(lastWindowTitle!==next){lastWindowTitle=next;nativeWindow.setTitle(next).catch(e=>notify(e.message));}}
  grip.title=grip.ariaLabel=t('Fenster verschieben · zum Andocken über die Strukturfläche ziehen','Move window · drag over the structure area to dock');
