@@ -80,20 +80,22 @@ test('ticket network expands source groups, explains typed edges, edits exact co
  await page.getByRole('button',{name:'Struktur aktualisieren',exact:true}).click();
  await page.getByRole('button',{name:'Alles einpassen',exact:true}).click();
  const edge=page.locator('.structure-edge[data-kind="value"] .structure-edge-hit').first();
- await edge.dispatchEvent('pointerenter',{clientX:400,clientY:300});
- await edge.dispatchEvent('click');
+ // Pin the edge through its supported keyboard interaction.
+ await edge.focus();
+ await edge.press('Enter');
  await expect(page.locator('.structure-edge-info')).toContainText('Datentyp:');
  const hoverCard=page.locator('.structure-card[data-kind="check"]').first();
- await hoverCard.dispatchEvent('pointerenter');
+ // Move the actual pointer so native WebKit leave events cannot undo a synthetic hover.
+ await hoverCard.hover();
  const hoverId=await hoverCard.getAttribute('data-node-id');
  const expected=await page.evaluate(id=>structure.getNetwork().edges.filter(e=>e.from===id||e.to===id).length,hoverId);
  await expect(page.locator('.structure-edge.highlighted')).toHaveCount(expected);
  expect(expected).toBeGreaterThan(0);
  await expect.poll(()=>page.locator('.structure-edge:not(.highlighted)').first().evaluate(e=>Number(getComputedStyle(e).opacity))).toBeLessThan(.3);
- await hoverCard.dispatchEvent('pointerleave');
+ await page.locator('.structure-heading').hover();
  await expect(page.locator('.structure-edge.highlighted')).toHaveCount(1);
  await expect(page.locator('.structure-edge-info')).toContainText('Datentyp:');
- expect(await page.locator('.structure-group-envelope').first().evaluate(e=>getComputedStyle(e).strokeWidth)).toBe('2px');
+ await expect(page.locator('.structure-group-envelope').first()).toHaveCSS('stroke-width','2px');
  const sourcePaths=await page.locator('.structure-card title').allTextContents();
  expect(sourcePaths.some(s=>s.replaceAll('\\','/').includes(fixturePath.replaceAll('\\','/')))).toBe(false);
  await page.evaluate(()=>{settings.language='en';structure.refreshSettings();});
