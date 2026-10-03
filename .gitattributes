@@ -1,0 +1,4 @@
+# Preserve audited upstream/source bytes on Windows and macOS checkouts.
+# Cargo.lock provenance and embedded Covenant Skill comparisons use raw bytes.
+resources/toolchains/** text=auto eol=lf
+resources/ai/** text=auto eol=lf
