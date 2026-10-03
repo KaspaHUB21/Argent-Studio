@@ -5,6 +5,7 @@
 - Add project-aware AI assistance with three independent reviewers and supervised local compiler and optional VM checks.
 - Show verified change previews and review findings at source lines; allow follow-up discussion and fresh revisions while a proposal remains pending.
 - Keep code changes in the editor until explicitly saved and preserve local per-file Code History.
+- Keep detached structure code synchronized after undo and redo when background refreshes overlap.
 - Update the bundled Argent compiler sources to b312deda6fe10f6493c8d49eb748e3f61860458a with matching runtime and source provenance.
 - Complete German and English UI messages, agent roles and verification errors; preserve source names and original external diagnostics.
 - Update language metadata and strengthen Windows/macOS regression and packaged application checks.
