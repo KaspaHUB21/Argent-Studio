@@ -38,12 +38,13 @@ for(const detached of [false,true])test('editing unopened imported code keeps on
  await expect(page.locator('.code-host:visible')).toHaveCount(0);
  await expect(editor).toContainText('require(count == 1)');
  expect(await page.evaluate(()=>__ARGENT_APP__.state.current.path)).toBe(entry);
- await editor.press('Control+z');await expect.poll(()=>page.evaluate(p=>__ARGENT_APP__.state.documents.find(d=>d.path===p).text,lib)).toBe(original);
+ await editor.press('ControlOrMeta+z');await expect.poll(()=>page.evaluate(p=>__ARGENT_APP__.state.documents.find(d=>d.path===p).text,lib)).toBe(original);
  await expect(editor).toContainText('require(count == 0)');
- await editor.press('Control+Shift+z');await expect(editor).toContainText('require(count == 1)');
+ await editor.press('ControlOrMeta+Shift+z');await expect.poll(()=>page.evaluate(p=>__ARGENT_APP__.state.documents.find(d=>d.path===p).text,lib)).toContain('require(count == 1)');await expect(editor).toContainText('require(count == 1)');
  await editor.fill('require(count == 2);');await expect.poll(()=>page.evaluate(p=>__ARGENT_APP__.state.documents.find(d=>d.path===p).text,lib)).toContain('count == 2');
  await page.locator('#save').click();await expect.poll(()=>fs.readFile(lib,'utf8')).toContain('count == 2');
  await expect(editor).toContainText('require(count == 2)');await expect(page.locator('.document-host:visible')).toHaveCount(1);
  await surface.screenshot({path:'qa/import-edit-'+(detached?'detached':'embedded')+'.png'});
  expect(errors).toEqual([]);
 });
+
