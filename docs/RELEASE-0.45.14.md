@@ -16,6 +16,10 @@ The packaged Windows smoke check passed, including Tickets, Spawns, Stones, ICC,
 
 The installer was not installed on the maintainer device. Native macOS arm64/x64 builds, packaged checks and updater checks remain pending for this exact update. No complete `latest.json` is generated until both Mac asset sets are available. Windows Authenticode status is NotSigned.
 
+## CI finding and correction
+
+The first Windows CI run passed at commit `b05b564`. The Apple Silicon run exposed a project-load timing issue: the UI retained a previous build success during preflight saving and announced the new success before final log persistence completed. Project loading remained correctly locked while that work was active. Studio now shows the compiling status immediately and reports completion after finalization. The project regression explicitly delays both writes and verifies the busy/finished boundary in German and English, without extra timeouts or retries. Both platform workflows must be rerun for the final source revision before release; the failed first macOS run is not release evidence.
+
 ## Required verification
 
 Preparation does not establish that release checks have passed. Record results from this exact source revision before publishing:

@@ -4,6 +4,7 @@
 
 - Update the pinned SilverScript compiler dependency from 1.0.0 to 1.0.1, pin compatible Kaspa registry crates to 2.1.0 and adapt the local Argent integration.
 - Restore the omitted Windows assembly in the published Kaspa hash crate from the official 2.1.0 release, with recorded source checksums.
+- Show build completion only after final log persistence, preventing stale success messages while project loading is still locked.
 - Preserve the existing Windows and macOS update channel and signing identity.
 
 ## 0.45.13

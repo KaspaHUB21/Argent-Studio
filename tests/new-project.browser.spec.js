@@ -13,7 +13,7 @@ test.afterAll(async()=>await server?.close());
 test.use({browserName:process.env.ARGENT_BROWSER==='webkit'?'webkit':'chromium',channel:process.env.ARGENT_BROWSER==='webkit'?undefined:'msedge'});
 for(const language of ['de','en'])test('new project first source compiles and later files preserve entry ('+language+')',async({page})=>{
  const base=await fs.mkdtemp(path.join(root,'test-output/new-project-')),seed=path.join(base,'seed'),fresh=path.join(base,'FreshProject'),entry=path.join(fresh,'fresh.ag');await fs.mkdir(seed);await fs.writeFile(path.join(seed,'seed.ag'),source);
- const calls=[];
+ const calls=[];let entryGate=null,logGate=null,entryWaiting=false,logWaiting=false;
  await page.exposeFunction('fixtureInvoke',async(command,a={})=>{calls.push({command,args:a});switch(command){
  case 'app_info':return {platform:process.platform==='darwin'?'macos':'windows',resources:path.join(base,'resources'),projectsDir:base,compiler,defaultProject:{root:seed,entry:path.join(seed,'seed.ag'),app:'FreshApp'}};
  case 'load_settings':return {language};
@@ -21,7 +21,7 @@ for(const language of ['de','en'])test('new project first source compiles and la
  case 'create_directory':return fs.mkdir(a.path,{recursive:true});
  case 'read_file':try{return await fs.readFile(a.path,'utf8');}catch(e){if(e.code==='ENOENT')throw Error('File not found');throw e;}
  case 'create_file':return fs.writeFile(a.path,a.text,{flag:'wx'});
- case 'write_file':return fs.writeFile(a.path,a.text);
+ case 'write_file':{if(entryGate&&a.path.endsWith('.argent-studio.json')){entryWaiting=true;await entryGate;}if(logGate&&a.path.endsWith('editor-build.log')){logWaiting=true;await logGate;}return fs.writeFile(a.path,a.text);}
  case 'language_request':return {items:[]};
  case 'build':{const output=path.join(fresh,'build','test');await fs.mkdir(output,{recursive:true});const args=['build',a.entry,'--out',output];if(a.appName)args.push('--app',a.appName);const r=await exec(compiler,args,{windowsHide:true});return {success:true,exitCode:0,stdout:r.stdout,stderr:r.stderr,output,files:[]};}
  default:throw Error('Unexpected fixture command: '+command);
@@ -46,7 +46,20 @@ for(const language of ['de','en'])test('new project first source compiles and la
  await page.locator('#compile').click();await page.locator('.build-entry-dialog select').selectOption(helper);await page.locator('.build-entry-dialog .dialog-buttons button').first().click();await expect(page.locator('#status')).toContainText(language==='de'?'Build erfolgreich':'Build succeeded');
  config=JSON.parse(await fs.readFile(path.join(fresh,'.argent-studio.json'),'utf8'));expect(config.entry).toBe('helper.ag');
  await page.evaluate(root=>window.__ARGENT_APP__.loadProject(root),fresh);await expect(page.locator('#entry-label')).toHaveText('helper.ag');await page.evaluate(file=>window.__ARGENT_APP__.openFile(file),entry);await expect(page.locator('#entry-label')).toHaveText('helper.ag');
- await page.locator('#compile').click();await expect(page.locator('#status')).toContainText(language==='de'?'Build erfolgreich':'Build succeeded');expect(calls.filter(c=>c.command==='build').at(-1).args.entry.replaceAll('\\','/')).toBe(helper.replaceAll('\\','/'));
+ // Slow preference saving and final log persistence must not expose a stale
+ // success as readiness. These gates exercise both races without timing sleeps.
+ let releaseEntry,releaseLog;entryGate=new Promise(resolve=>{releaseEntry=resolve;});logGate=new Promise(resolve=>{releaseLog=resolve;});
+ const previousBuilds=calls.filter(c=>c.command==='build').length;
+ try{
+  await page.locator('#compile').click();await expect.poll(()=>entryWaiting).toBe(true);
+  await expect(page.locator('#status')).toContainText(language==='de'?'Kompilierung läuft':'Compiling');await expect(page.locator('#compile')).toBeDisabled();
+  expect(calls.filter(c=>c.command==='build').length).toBe(previousBuilds);
+  releaseEntry();await expect.poll(()=>logWaiting).toBe(true);
+  expect(calls.filter(c=>c.command==='build').length).toBe(previousBuilds+1);
+  await expect(page.locator('#status')).toContainText(language==='de'?'Kompilierung läuft':'Compiling');await expect(page.locator('#compile')).toBeDisabled();
+  releaseLog();await expect(page.locator('#compile')).toBeEnabled();await expect(page.locator('#status')).toContainText(language==='de'?'Build erfolgreich':'Build succeeded');
+  expect(calls.filter(c=>c.command==='build').at(-1).args.entry.replaceAll('\\','/')).toBe(helper.replaceAll('\\','/'));
+ }finally{releaseEntry();releaseLog();entryGate=null;logGate=null;}
  // Deleted saved paths are not silently redirected to a different source.
  await fs.unlink(helper);await page.evaluate(root=>window.__ARGENT_APP__.loadProject(root),fresh);await expect(page.locator('#entry-label')).toHaveText('fresh.ag');
  const moved=path.join(base,'MovedProject');await fs.cp(fresh,moved,{recursive:true});await fs.writeFile(path.join(moved,'.argent-studio.json'),JSON.stringify({version:1,entry:'fresh.ag',app:'FreshApp'}));await page.evaluate(root=>window.__ARGENT_APP__.loadProject(root),moved);await expect(page.locator('#entry-label')).toHaveText('fresh.ag');expect((await page.evaluate(()=>window.__ARGENT_APP__.state.entry)).replaceAll('\\','/')).toBe(path.join(moved,'fresh.ag').replaceAll('\\','/'));
