@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.45.14
+
+- Update the pinned SilverScript compiler dependency from 1.0.0 to 1.0.1, pin compatible Kaspa registry crates to 2.1.0 and adapt the local Argent integration.
+- Restore the omitted Windows assembly in the published Kaspa hash crate from the official 2.1.0 release, with recorded source checksums.
+- Preserve the existing Windows and macOS update channel and signing identity.
+
 ## 0.45.13
 
 - Add project-aware AI assistance with three independent reviewers and supervised local compiler and optional VM checks.

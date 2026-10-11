@@ -1,0 +1,41 @@
+{
+  "package": "kaspa-hashes",
+  "version": "2.1.0",
+  "registry": "https://crates.io/crates/kaspa-hashes/2.1.0",
+  "crateSha256": "ad607d2d41c3ba426b5ecb48e3070d2783d71249ebda6132404b338e19f9025c",
+  "embeddedVcsRevision": "ba5ddcd9a059fd90e163254eb07b3dedba9208f9",
+  "embeddedVcsPubliclyResolvable": false,
+  "originalFiles": {
+    ".cargo_vcs_info.json": "64ebd2bfd3af9a956b67fb578e28ea3ee3b7e23a0ef9fb7d062670eb3c70e86f",
+    "build.rs": "93fe7888a0453ea8d8f4b053ebeaf2a0602ace59e3e7f2bc2450fcfac08a2fa4",
+    "Cargo.lock": "d6e7d802c9c0c1f998d120301e4b00e35373e9e371711e53afdcf909618a94a1",
+    "Cargo.toml": "098ef8dda105af5a0e65434a02dc1871c89ba4fadfe15d82b9b5267c6888ea96",
+    "Cargo.toml.orig": "ec861231d4dcf42b947287f05d935329635599f396507821e82dc9fc5b879457",
+    "benches/bench.rs": "55ac737a16176eb94630f818f39f498f4ab4038e52200db172a1c96def7f0769",
+    "src/hashers.rs": "752f6e6353b1316732e3141c8ac8a92094be70314e47ea83bb6dd68d5ca951c5",
+    "src/lib.rs": "c24b8a276edd0defcf6c22f46a7bae289bb59c9639eee6dde4fe46657484b5d3",
+    "src/pow_hashers.rs": "4deac0232880f6b7cb3ffe0975aa76271f4873c761639ceeaa9f19f9fc703e49",
+    "src/asm/keccakf1600_x86-64-elf.s": "dc8df0c9e6414f306a425804b627cfbb35c98e345f3140953c42c02afa10d5ab",
+    "src/asm/keccakf1600_x86-64-mingw64.s": "e38811bebb8a6a5506e3463260250f858d3c7eb4ceb4c2fe236655e832e9253c",
+    "src/asm/keccakf1600_x86-64-osx.s": "04bbf67dccd2bca8fc39d81d89760c9abffe76a8356c296512127db3635137cd",
+    "src/asm/keccakf1600_x86-64-win64.s": "e38811bebb8a6a5506e3463260250f858d3c7eb4ceb4c2fe236655e832e9253c"
+  },
+  "restoredFiles": [
+    {
+      "path": "src/asm/keccakf1600_x86-64-msvc.asm",
+      "repository": "https://github.com/kaspanet/rusty-kaspa",
+      "revision": "01b532e8b553523216471682649693af92f0fd16",
+      "tag": "v2.1.0",
+      "upstreamPath": "crypto/hashes/src/asm/keccakf1600_x86-64-msvc.asm",
+      "sha256": "95bb94c219719d45020171d03745caa0983478bf69867947f6075ddae24e5f91"
+    },
+    {
+      "path": "LICENSE",
+      "repository": "https://github.com/kaspanet/rusty-kaspa",
+      "revision": "01b532e8b553523216471682649693af92f0fd16",
+      "tag": "v2.1.0",
+      "upstreamPath": "LICENSE",
+      "sha256": "fb06b99a835c4cdade7f2f180fd87c0198d552cf1e0cd14c34716411b009a92f"
+    }
+  ]
+}

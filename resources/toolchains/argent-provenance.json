@@ -4,18 +4,22 @@
     "repository": "https://github.com/argent-lang/argent",
     "archiveUrl": "https://codeload.github.com/argent-lang/argent/zip/b312deda6fe10f6493c8d49eb748e3f61860458a",
     "archiveSha256": "81e632c6d99a5bac09e2ab684a385581e023a5637a15144e2f09ef54cb9b6869",
-    "cargoLockSha256": "3e174a3748dca7bec98e1e9ee24f6bf852568003aa0dda9628b430dce8d32cb9"
+    "cargoLockSha256": "91f26ac3f8a6b77ef994658acee35924ba88d7322d424eb186642a4e3ffb1fbd"
   },
   "silverscript": {
-    "revision": "3ed973335b59269293564805cc2c58a14595ec03",
-    "version": "1.0.0"
+    "revision": "a0dd7448ccc7bad5b99140f2c8edbbd0b2a874f1",
+    "version": "1.0.1"
   },
   "rustyKaspa": {
-    "revision": "a41a333b08848f41bf737b72592e463a6011b8ac"
+    "source": "crates.io",
+    "version": "2.1.0"
   },
-  "updatedAt": "2026-10-03",
+  "updatedAt": "2026-10-11",
   "adaptations": [
     "Preserve Studio-specific examples/studio_test.rs bridge to real Argent runtime and Kaspa VM.",
-    "Omit upstream examples/build generated artifacts; Studio compiles current sources into fresh output."
+    "Omit upstream examples/build generated artifacts; Studio compiles current sources into fresh output.",
+    "Adapt retained Argent sources to SilverScript 1.0.1 shared ABI template_hash and Kaspa 2.1.0 EngineFlags and block_mass_limits APIs.",
+    "Patch only kaspa-hashes 2.1.0 with the omitted MSVC assembly and license from official v2.1.0 revision 01b532e8b553523216471682649693af92f0fd16; registry Rust sources and other platform assembly remain unchanged. See kaspa-hashes-2.1.0/vendor-provenance.json for checksums and the distinct embedded registry VCS revision.",
+    "Lock spin 0.9.9 instead of yanked 0.9.8, matching the updated SilverScript dependency fix."
   ]
 }

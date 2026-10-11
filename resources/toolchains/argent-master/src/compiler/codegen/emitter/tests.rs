@@ -4508,7 +4508,7 @@ fn expanded_actor_records_sil_and_capsule_template_cuts() {
     *prefix.last_mut().expect("capsule prefix contains context") ^= 1;
     handle.template.prefix = prefix.clone();
     let suffix = handle.template.suffix.clone();
-    handle.template.hash = silverscript_lang::template::template_hash(&prefix, &suffix);
+    handle.template.hash = silverscript_abi::template_hash(&prefix, &suffix);
     let err = corrupted.check_template_plan_consistency().expect_err("corrupted capsule context is rejected");
     assert!(matches!(err, TemplatePlanError::ActorTypeHandleMismatch { .. }), "unexpected error: {err}");
 
@@ -4531,7 +4531,7 @@ fn expanded_actor_records_sil_and_capsule_template_cuts() {
     noncanonical_prefix.extend_from_slice(&context[first_push_end..]);
     let suffix = handle.template.suffix.clone();
     handle.template.prefix = noncanonical_prefix.clone();
-    handle.template.hash = silverscript_lang::template::template_hash(&noncanonical_prefix, &suffix);
+    handle.template.hash = silverscript_abi::template_hash(&noncanonical_prefix, &suffix);
     let err = corrupted.check_template_plan_consistency().expect_err("non-canonical capsule context is rejected");
     assert!(matches!(err, TemplatePlanError::ActorTypeHandleMismatch { .. }), "unexpected error: {err}");
 
@@ -9628,7 +9628,7 @@ fn assert_compiled_projection(actor: &str, compiled: &CompiledContractArtifact) 
     assert!(compiled.state_span.len > 0, "actor `{actor}` should have a non-empty state span");
 
     let (prefix, _, suffix) = compiled.script_parts(&compiled.bytecode).expect("state span fits the compiled script");
-    let template_hash = silverscript_lang::template::template_hash(prefix, suffix);
+    let template_hash = silverscript_abi::template_hash(prefix, suffix);
     assert_eq!(template_hash, compiled.template_hash, "actor `{actor}` template hash must use the Sil template hash");
 }
 

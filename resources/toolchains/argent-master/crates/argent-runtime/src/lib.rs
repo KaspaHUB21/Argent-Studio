@@ -1892,7 +1892,7 @@ pub fn execute_transaction_with_covenants(tx: &mut Transaction, entries: Vec<Utx
 
     let mass_calculator = MassCalculator::new_with_consensus_params(&MAINNET_PARAMS);
     let masses = mass_calculator.calc_non_contextual_masses(tx);
-    let limits = MAINNET_PARAMS.block_mass_limits().after();
+    let limits = MAINNET_PARAMS.block_mass_limits;
     if masses.compute_mass > limits.compute {
         return Err(BuilderError::ComputeMassLimitExceeded { compute_mass: masses.compute_mass, limit: limits.compute });
     }
@@ -1926,7 +1926,7 @@ fn measure_input_script_units_with_covenants(
 }
 
 pub fn covenant_engine_flags() -> EngineFlags {
-    EngineFlags { covenants_enabled: true, ..Default::default() }
+    EngineFlags::default()
 }
 
 #[cfg(test)]

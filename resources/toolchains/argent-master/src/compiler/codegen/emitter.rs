@@ -2343,7 +2343,7 @@ fn actor_type_handle_artifact(
     }
     let prefix = &compiled.bytecode[..context_end];
     let suffix = &compiled.bytecode[state_end..];
-    let hash = silverscript_lang::template::template_hash(prefix, suffix);
+    let hash = silverscript_abi::template_hash(prefix, suffix);
     Ok(ActorTypeHandleArtifact {
         state: source_state.to_string(),
         context_fields,

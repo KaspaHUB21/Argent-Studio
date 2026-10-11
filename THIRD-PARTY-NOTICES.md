@@ -4,14 +4,18 @@ Vendored code retains the license provided with that code. The root MIT license 
 
 ## Argent
 
-The compiler source snapshot originates from `https://github.com/argent-lang/argent` at commit `d08e52dd1e18c9f7e9a2dc482048c2db31d25611`. The copied sources include the local Studio transaction-runner integration (`examples/studio_test.rs`). This is a vendored working snapshot, not a claim of an unmodified upstream checkout.
+The compiler source snapshot originates from `https://github.com/argent-lang/argent` at commit `b312deda6fe10f6493c8d49eb748e3f61860458a`. The copied sources include the local Studio transaction-runner integration (`examples/studio_test.rs`). This is a vendored working snapshot, not a claim of an unmodified upstream checkout.
 
 - Source: `resources/toolchains/argent-master`
 - License: ISC, retained in that directory's `LICENSE`
 - Example licenses: retained alongside each public template
 - Language-service license: `resources/assets/language/ARGENT-LICENSE`
 
-The compiler uses SilverScript v1.0.0 at commit `3ed973335b59269293564805cc2c58a14595ec03`, with the local ABI adapter updated to `check_consistency`. Its rusty-kaspa revision remains `a41a333b08848f41bf737b72592e463a6011b8ac`. The compiler's Cargo manifests pin these revisions. The accompanying Cargo lockfile records the resolved transitive dependencies.
+The local Studio integration uses SilverScript workspace version 1.0.1 at commit `a0dd7448ccc7bad5b99140f2c8edbbd0b2a874f1` and Kaspa registry crates pinned to exact version `2.1.0`. Compatibility adaptations are local Studio changes to the retained Argent source snapshot, not a claim that the unmodified upstream snapshot supports these dependency versions. The Cargo manifests and accompanying lockfile record the resolved dependencies.
+
+## kaspa-hashes
+
+The vendored `resources/toolchains/kaspa-hashes-2.1.0` contains the official registry package version 2.1.0 (ISC; license retained in its `LICENSE`). Its omitted MSVC assembly file and ISC license are restored from immutable official Kaspa v2.1.0 tag revision `01b532e8b553523216471682649693af92f0fd16`, at source path `crypto/hashes`. The package's embedded VCS revision was not publicly resolvable and was not used for restoration. `vendor-provenance.json` records exact origins and file checksums. The local workspace patch preserves package version and hashing logic.
 
 ## Node.js
 
