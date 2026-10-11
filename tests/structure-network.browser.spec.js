@@ -80,9 +80,12 @@ test('ticket network expands source groups, explains typed edges, edits exact co
  await page.getByRole('button',{name:'Struktur aktualisieren',exact:true}).click();
  await page.getByRole('button',{name:'Alles einpassen',exact:true}).click();
  const edge=page.locator('.structure-edge[data-kind="value"] .structure-edge-hit').first();
- // Pin the edge through its supported keyboard interaction.
+ // A completed async redraw must preserve the keyboard target, so Enter still pins it.
  await edge.focus();
- await edge.press('Enter');
+ await expect(edge).toBeFocused();
+ await page.evaluate(()=>structure.refresh());
+ await expect(edge).toBeFocused();
+ await page.keyboard.press('Enter');
  await expect(page.locator('.structure-edge-info')).toContainText('Datentyp:');
  const hoverCard=page.locator('.structure-card[data-kind="check"]').first();
  // Move the actual pointer so native WebKit leave events cannot undo a synthetic hover.

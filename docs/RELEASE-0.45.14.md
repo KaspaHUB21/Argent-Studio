@@ -20,6 +20,8 @@ The installer was not installed on the maintainer device. Native macOS arm64/x64
 
 The first Windows CI run passed at commit `b05b564`. The Apple Silicon run exposed a project-load timing issue: the UI retained a previous build success during preflight saving and announced the new success before final log persistence completed. Project loading remained correctly locked while that work was active. Studio now shows the compiling status immediately and reports completion after finalization. The project regression explicitly delays both writes and verifies the busy/finished boundary in German and English, without extra timeouts or retries. Both platform workflows must be rerun for the final source revision before release; the failed first macOS run is not release evidence.
 
+The next Apple Silicon run exposed an additional keyboard-focus issue in the structure view: a background refresh removed the focused SVG connection before Enter could pin its details. The view now restores focus by connection or block identity after redraw. A regression forces a refresh between focus and Enter and checks that keyboard interaction and pinned details survive. Failed intermediate workflows are not release evidence; rerun both platform workflows for the final correction.
+
 ## Required verification
 
 Preparation does not establish that release checks have passed. Record results from this exact source revision before publishing:
